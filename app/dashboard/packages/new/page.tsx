@@ -33,9 +33,9 @@ export default function NewPackagePage() {
   }>({ open: false, title: "", description: "" })
 
   const { data: exercises } = useSWR<Exercise[]>(
-    "/exercises",
-    () => apiClient.get("/exercises")
-  )
+  "/exercises",
+  async () => (await apiClient.get("/exercises/")).data
+)
 
   const filteredExercises = exercises?.filter(
     (exercise) =>
