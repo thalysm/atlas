@@ -1,34 +1,22 @@
-# Etapa 1 - Builder: Instala dependências e faz o build
+# Etapa 1 - Builder
 FROM node:20-alpine AS builder
-
-# 1. Declare os argumentos que serão recebidos do docker-compose.yml
 ARG NEXT_PUBLIC_API_URL
-
 WORKDIR /app
-
 COPY package*.json ./
-
-# É mais seguro usar 'npm ci' para builds consistentes
 RUN npm install --legacy-peer-deps
-
 COPY . .
-
-# 2. Torne os ARGs disponíveis como ENVs para o comando de build
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
-
 RUN rm -rf .next
-
-# O build agora reconhecerá as variáveis NEXT_PUBLIC_
 RUN npm run build
 
-# Etapa 2 - Runner: Imagem leve para produção
+# Etapa 2 - Runner
 FROM node:20-alpine AS runner
-
 WORKDIR /app
 
+# Variáveis de ambiente de runtime
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 
-# Copia os artefatos de build da etapa anterior
 COPY --from=builder /app/.next .next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/node_modules ./node_modules
