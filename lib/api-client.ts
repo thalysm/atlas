@@ -37,12 +37,14 @@ export class ApiClient {
       headers["Authorization"] = `Bearer ${this.token}`
     }
 
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers,
-    })
+    const finalUrl = `${this.baseUrl}${endpoint}`;
+  console.log("URL FINAL SENDO REQUISITADA:", finalUrl);
 
-    console.log(`Request to ${endpoint}:`, response)
+  const response = await fetch(finalUrl, {
+    ...options,
+    headers,
+  })
+
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: "Request failed" }))
