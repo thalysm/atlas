@@ -1,0 +1,26 @@
+import Link from "next/link"
+import { LoginForm } from "@/components/auth/login-form"
+
+export default function LoginPage() {
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
+      <div className="w-full max-w-md space-y-8">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-primary">Atlas</h1>
+          <p className="mt-2 text-muted-foreground">Entre na sua conta</p>
+        </div>
+
+        <div className="bg-card p-8 rounded-lg border border-border">
+          <LoginForm />
+
+          <div className="mt-6 text-center text-sm">
+            <span className="text-muted-foreground">Não tem uma conta? </span>
+            <Link href="/register" className="text-primary hover:underline">
+              Criar conta
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
