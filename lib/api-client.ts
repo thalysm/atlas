@@ -42,6 +42,8 @@ export class ApiClient {
       headers,
     })
 
+    console.log(`Request to ${endpoint}:`, response)
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: "Request failed" }))
       throw new Error(error.message || `HTTP ${response.status}`)
