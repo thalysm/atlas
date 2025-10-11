@@ -1,11 +1,13 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'
 
 export class ApiClient {
   private baseUrl: string
   private token: string | null = null
 
   constructor() {
+    console.log("API_BASE_URL CARREGADA:", API_BASE_URL)
     this.baseUrl = API_BASE_URL
+
     if (typeof window !== "undefined") {
       this.token = localStorage.getItem("atlas_token")
     }
@@ -26,9 +28,9 @@ export class ApiClient {
   }
 
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     }
 
     if (this.token) {
