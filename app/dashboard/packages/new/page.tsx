@@ -33,14 +33,16 @@ export default function NewPackagePage() {
   }>({ open: false, title: "", description: "" })
 
   const { data: exercises } = useSWR<Exercise[]>(
-  "/exercises",
-  async () => (await apiClient.get("/exercises/")).data
-)
+    "/exercises",
+    () => apiClient.get("/exercises")
+  )
 
   const filteredExercises = exercises?.filter(
     (exercise) =>
       exercise.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      exercise.muscle_group.toLowerCase().includes(searchQuery.toLowerCase())
+      exercise.muscle_groups.some((group) =>
+        group.toLowerCase().includes(searchQuery.toLowerCase())
+      )
   )
 
   const toggleExercise = (exerciseId: string) => {
@@ -64,19 +66,11 @@ export default function NewPackagePage() {
     }
 
     try {
-      // Apenas os IDs são enviados
       const exercisesArray = selectedExercises.map((exerciseId, index) => ({
         exercise_id: exerciseId,
         order: index + 1,
         notes: null,
       }))
-
-      console.log("Payload a ser enviado:", {
-        name: formData.name,
-        description: formData.description || null,
-        exercises: exercisesArray,
-        is_public: formData.is_public,
-      });
 
       await apiClient.post("/packages", {
         name: formData.name,
