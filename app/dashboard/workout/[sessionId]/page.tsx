@@ -102,7 +102,7 @@ export default function WorkoutSessionPage() {
     setAlertModal({
       open: true,
       title: "Finalizar Treino",
-      description: "Tem certeza que deseja finalizar o treino? Você não poderá mais editá-lo.",
+      description: "Tem certeza que deseja finalizar o treino?",
       onConfirm: async () => {
         try {
           await apiClient.post(`/sessions/${sessionId}/complete`)
