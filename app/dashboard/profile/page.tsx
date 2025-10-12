@@ -92,7 +92,7 @@ export default function ProfilePage() {
             variant="ghost"
             size="icon"
             onClick={() => router.push("/dashboard")}
-            className="text-foreground hover:text-primary"
+            className="text-foreground"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>

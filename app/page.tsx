@@ -1,4 +1,5 @@
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Dumbbell, Calendar, TrendingUp, Users, Package, Clock, Target, Share2, BarChart3, Trophy } from "lucide-react"
@@ -11,11 +12,11 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <Dumbbell className="h-8 w-8 text-primary" />
+              <Image src="/logo.svg" alt="Atlas Logo" width={20} height={20} />
               <span className="text-2xl font-bold text-foreground">Atlas</span>
             </div>
             <div className="flex items-center gap-4">
-              <Button asChild variant="ghost" className="text-foreground hover:text-primary">
+              <Button asChild variant="ghost" className="text-foreground ">
                 <Link href="/login">Entrar</Link>
               </Button>
               <Button asChild className="bg-primary hover:bg-primary-hover">
@@ -44,7 +45,7 @@ export default function LandingPage() {
             </h1>
 
             <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Monte treinos personalizados, acompanhe sua progressão em tempo real e compete com amigos. Tudo em um só
+              Monte treinos personalizados, acompanhe sua progressão em tempo real e compita com amigos. Tudo em um só
               lugar.
             </p>
 
@@ -235,7 +236,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Dumbbell className="h-6 w-6 text-primary" />
+              <Image src="/logo.svg" alt="Atlas Logo" width={20} height={20} />
               <span className="text-xl font-bold text-foreground">Atlas</span>
             </div>
             <p className="text-muted-foreground">© 2025 Atlas. Sistema de treino personalizado.</p>

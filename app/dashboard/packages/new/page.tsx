@@ -134,7 +134,7 @@ export default function NewPackagePage() {
             variant="ghost"
             size="icon"
             onClick={() => router.back()}
-            className="text-foreground hover:text-primary"
+            className="text-foreground"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
