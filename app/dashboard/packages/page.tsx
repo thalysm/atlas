@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertModal } from "@/components/ui/alert-modal"
 import { Plus, ArrowLeft, Package } from "lucide-react"
+import { EditPackageModal } from "@/components/packages/edit-package-modal"
 
 export default function PackagesPage() {
   const router = useRouter()
@@ -22,11 +23,13 @@ export default function PackagesPage() {
 
   const [isJoinOpen, setIsJoinOpen] = useState(false)
   const [packageCode, setPackageCode] = useState("")
-  const [alertModal, setAlertModal] = useState<{ open: boolean; title: string; description: string }>({
+  const [alertModal, setAlertModal] = useState<{ open: boolean; title: string; description: string; onConfirm?: () => void, variant?: "default" | "destructive" }>({
     open: false,
     title: "",
     description: "",
   })
+
+  const [editingPackage, setEditingPackage] = useState<WorkoutPackage | null>(null)
 
   const handleCopyPackage = async (packageId: string) => {
     try {
@@ -65,6 +68,28 @@ export default function PackagesPage() {
         description: "Código inválido ou pacote não encontrado",
       })
     }
+  }
+
+  const handleDeletePackage = (packageId: string) => {
+    setAlertModal({
+      open: true,
+      title: "Confirmar Exclusão",
+      description: "Tem certeza que deseja deletar este pacote? Esta ação não pode ser desfeita.",
+      variant: "destructive",
+      onConfirm: async () => {
+        try {
+          await apiClient.delete(`/packages/${packageId}`)
+          mutate()
+          setAlertModal({ open: false, title: "", description: "" })
+        } catch (error) {
+          setAlertModal({
+            open: true,
+            title: "Erro",
+            description: "Erro ao deletar o pacote.",
+          })
+        }
+      },
+    })
   }
 
   return (
@@ -135,7 +160,12 @@ export default function PackagesPage() {
             {myPackages && myPackages.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {myPackages.map((pkg) => (
-                  <PackageCard key={pkg.id} package={pkg} />
+                  <PackageCard
+                    key={pkg.id}
+                    pkg={pkg}
+                    onEdit={setEditingPackage}
+                    onDelete={handleDeletePackage}
+                  />
                 ))}
               </div>
             ) : (
@@ -155,7 +185,13 @@ export default function PackagesPage() {
             {publicPackages && publicPackages.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {publicPackages.map((pkg) => (
-                  <PackageCard key={pkg.id} package={pkg} onCopy={handleCopyPackage} />
+                  <PackageCard
+                    key={pkg.id}
+                    pkg={pkg}
+                    onCopy={handleCopyPackage}
+                    onEdit={setEditingPackage}
+                    onDelete={handleDeletePackage}
+                  />
                 ))}
               </div>
             ) : (
@@ -165,11 +201,22 @@ export default function PackagesPage() {
         </Tabs>
       </div>
 
+      <EditPackageModal
+        isOpen={!!editingPackage}
+        onOpenChange={() => setEditingPackage(null)}
+        pkg={editingPackage}
+        mutate={mutate}
+      />
+
       <AlertModal
         open={alertModal.open}
         onOpenChange={(open) => setAlertModal({ ...alertModal, open })}
         title={alertModal.title}
         description={alertModal.description}
+        onConfirm={alertModal.onConfirm}
+        variant={alertModal.variant}
+        cancelText={alertModal.onConfirm ? "Cancelar" : undefined}
+        confirmText={alertModal.onConfirm ? "Confirmar" : "OK"}
       />
     </div>
   )

@@ -4,16 +4,17 @@ import type { WorkoutPackage } from "@/lib/types"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Dumbbell, Lock, Globe } from "lucide-react"
-import Link from "next/link"
+import { Dumbbell, Lock, Globe, Trash2 } from "lucide-react"
 
 interface PackageCardProps {
   package: WorkoutPackage
   onCopy?: (packageId: string) => void
+  onEdit: (pkg: WorkoutPackage) => void
+  onDelete: (packageId: string) => void
   showActions?: boolean
 }
 
-export function PackageCard({ package: pkg, onCopy, showActions = true }: PackageCardProps) {
+export function PackageCard({ pkg, onCopy, onEdit, onDelete, showActions = true }: PackageCardProps) {
   return (
     <Card className="p-6 border-border hover:border-primary transition-colors">
       <div className="space-y-4">
@@ -40,14 +41,17 @@ export function PackageCard({ package: pkg, onCopy, showActions = true }: Packag
 
         {showActions && (
           <div className="flex gap-2">
-            <Button asChild className="flex-1 bg-primary hover:bg-primary-hover">
-              <Link href={`/dashboard/packages/${pkg.id}`}>Ver Detalhes</Link>
+            <Button onClick={() => onEdit(pkg)} className="flex-1 bg-primary hover:bg-primary-hover">
+              Ver Detalhes
             </Button>
             {onCopy && (
               <Button variant="outline" onClick={() => onCopy(pkg.id)} className="border-border">
                 Copiar
               </Button>
             )}
+            <Button variant="destructive" size="icon" onClick={() => onDelete(pkg.id)}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         )}
       </div>
