@@ -7,25 +7,36 @@ import { apiClient } from "@/lib/api-client"
 import { WorkoutCalendar } from "@/components/calendar/workout-calendar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Clock, Dumbbell, ArrowLeft } from "lucide-react"
+import { WorkoutSessionModal } from "@/components/calendar/workout-session-modal"
 
 export default function CalendarPage() {
   const router = useRouter()
   const [currentDate] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
 
   const { data: calendarData } = useSWR(
     `/analytics/calendar?year=${currentDate.getFullYear()}&month=${currentDate.getMonth() + 1}`,
     () =>
       apiClient.get<{ calendar_data: Record<string, any[]> }>(
-        `/analytics/calendar?year=${currentDate.getFullYear()}&month=${currentDate.getMonth() + 1}`,
-      ),
+        `/analytics/calendar?year=${currentDate.getFullYear()}&month=${currentDate.getMonth() + 1}`
+      )
   )
 
   const workoutsByDate = calendarData?.calendar_data || {}
-  const selectedWorkouts = selectedDate ? workoutsByDate[selectedDate] || [] : []
+  
+  const selectedWorkouts = selectedDate 
+    ? workoutsByDate[format(selectedDate, "yyyy-MM-dd")] || [] 
+    : []
+
+  const handleDateClick = (dateStr: string) => {
+    // Parse the date string as UTC to avoid timezone shifts
+    const [year, month, day] = dateStr.split('-').map(Number)
+    setSelectedDate(new Date(year, month - 1, day))
+  }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -47,19 +58,23 @@ export default function CalendarPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <WorkoutCalendar workoutsByDate={workoutsByDate} onDateClick={setSelectedDate} />
+            <WorkoutCalendar workoutsByDate={workoutsByDate} onDateClick={handleDateClick} />
           </div>
 
           <div className="space-y-4">
             <Card className="p-6 border-border">
               <h3 className="font-bold text-lg text-foreground mb-4">
-                {selectedDate ? format(new Date(selectedDate), "d 'de' MMMM", { locale: ptBR }) : "Selecione um dia"}
+                {selectedDate ? format(selectedDate, "d 'de' MMMM", { locale: ptBR }) : "Selecione um dia"}
               </h3>
 
               {selectedWorkouts.length > 0 ? (
                 <div className="space-y-3">
                   {selectedWorkouts.map((workout) => (
-                    <div key={workout.id} className="p-4 bg-surface rounded-lg border border-border">
+                    <button
+                      key={workout.id}
+                      onClick={() => setSelectedSessionId(workout.id)}
+                      className="w-full text-left p-4 bg-surface rounded-lg border border-border hover:border-primary transition-colors"
+                    >
                       <div className="flex items-start gap-3">
                         <div className="p-2 bg-primary/10 rounded-lg">
                           <Dumbbell className="h-4 w-4 text-primary" />
@@ -72,7 +87,7 @@ export default function CalendarPage() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : selectedDate ? (
@@ -84,6 +99,10 @@ export default function CalendarPage() {
           </div>
         </div>
       </div>
+      <WorkoutSessionModal
+        sessionId={selectedSessionId}
+        onOpenChange={(isOpen) => !isOpen && setSelectedSessionId(null)}
+      />
     </div>
   )
 }
