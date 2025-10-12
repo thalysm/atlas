@@ -124,7 +124,7 @@ export default function WorkoutSessionPage() {
         onConfirm: async () => {
             try {
                 await apiClient.delete(`/sessions/${sessionId}`);
-                router.push("/dashboard");
+                router.push("/dashboard"); 
             } catch (error) {
                 setAlertModal({
                     open: true,

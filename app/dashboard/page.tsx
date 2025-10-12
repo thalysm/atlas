@@ -1,17 +1,31 @@
 "use client"
 
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { apiClient } from "@/lib/api-client"
-import type { WorkoutPackage } from "@/lib/types"
+import type { WorkoutPackage, WorkoutSession } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Dumbbell, Calendar, TrendingUp, Users } from "lucide-react"
+import { Dumbbell, Calendar, TrendingUp, Users, PlayCircle, Plus } from "lucide-react"
 import Link from "next/link"
+import { UserProfileDropdown } from "@/components/dashboard/user-profile-dropdown"
+import { formatDistanceToNow } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
 export default function DashboardPage() {
   const router = useRouter()
   const { data: packages } = useSWR<WorkoutPackage[]>("/packages", () => apiClient.get("/packages"))
+  const { data: sessions } = useSWR<WorkoutSession[]>("/sessions/all", () => apiClient.get("/sessions/all"))
+
+  const activeSessions = sessions?.filter(s => !s.is_completed)
+
+  useEffect(() => {
+    if (activeSessions && activeSessions.length > 0) {
+      // Se houver uma sessão ativa, redireciona para a mais recente
+      router.push(`/dashboard/workout/${activeSessions[0].id}`)
+    }
+  }, [activeSessions, router])
 
   const handleStartWorkout = async (packageId: string) => {
     try {
@@ -22,13 +36,43 @@ export default function DashboardPage() {
     }
   }
 
+  const handleStartEmptyWorkout = async () => {
+    try {
+      const response = await apiClient.post<{ id: string }>("/sessions/start-empty")
+      router.push(`/dashboard/workout/${response.id}`)
+    } catch (error) {
+      alert("Erro ao iniciar treino livre")
+    }
+  }
+  
+  // Renderiza um estado de carregamento enquanto verifica as sessões
+  if (sessions === undefined) {
+    return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+            <p className="text-muted-foreground">Carregando seu dashboard...</p>
+        </div>
+    )
+  }
+  
+  // Se já houver uma sessão ativa, a página não renderiza o dashboard, pois o useEffect irá redirecionar
+  if(activeSessions && activeSessions.length > 0) {
+    return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+            <p className="text-muted-foreground">Você tem um treino em andamento. Redirecionando...</p>
+        </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
-        <div>
-          <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground mt-2">Bem-vindo ao Atlas</p>
-        </div>
+        <header className="flex items-center justify-between">
+            <div>
+                <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
+                <p className="text-muted-foreground mt-2">Bem-vindo de volta ao Atlas!</p>
+            </div>
+            <UserProfileDropdown />
+        </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
@@ -90,6 +134,12 @@ export default function DashboardPage() {
 
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-4">Iniciar Treino</h2>
+           <div className="mb-4">
+             <Button onClick={handleStartEmptyWorkout} variant="outline" className="w-full border-border">
+                <Plus className="h-4 w-4 mr-2"/>
+                Iniciar Treino Livre
+             </Button>
+           </div>
           {packages && packages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {packages.map((pkg) => (

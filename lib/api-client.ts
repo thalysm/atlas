@@ -38,18 +38,36 @@ export class ApiClient {
 
     const finalUrl = `${this.baseUrl}${endpoint}`;
 
-  const response = await fetch(finalUrl, {
-    ...options,
-    headers,
-  })
+    const response = await fetch(finalUrl, {
+        ...options,
+        headers,
+    })
+
+    if (response.status === 401) {
+        // Unauthorized, token is invalid or expired
+        this.clearToken();
+        // Redirect to home/login page
+        if (typeof window !== "undefined") {
+            window.location.href = '/';
+        }
+        // Throw an error to stop further processing
+        throw new Error("Sessão expirada. Por favor, faça o login novamente.");
+    }
 
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Request failed" }))
-      throw new Error(error.message || `HTTP ${response.status}`)
+      const error = await response.json().catch(() => ({ detail: "Request failed" }))
+      throw new Error(error.detail || `HTTP ${response.status}`)
     }
 
-    return response.json()
+    // Handle cases where the response body might be empty (e.g., for a 204 No Content response)
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.indexOf("application/json") !== -1) {
+        return response.json();
+    } else {
+        // If it's not JSON, we can return a resolved promise with a success message or null
+        return Promise.resolve(null as T);
+    }
   }
 
   async get<T>(endpoint: string): Promise<T> {
