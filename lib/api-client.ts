@@ -5,7 +5,6 @@ export class ApiClient {
   private token: string | null = null
 
   constructor() {
-    console.log("API_BASE_URL CARREGADA:", API_BASE_URL)
     this.baseUrl = API_BASE_URL
 
     if (typeof window !== "undefined") {
@@ -38,7 +37,6 @@ export class ApiClient {
     }
 
     const finalUrl = `${this.baseUrl}${endpoint}`;
-  console.log("URL FINAL SENDO REQUISITADA:", finalUrl);
 
   const response = await fetch(finalUrl, {
     ...options,
