@@ -1,50 +1,64 @@
-"use client"
+"use client";
 
-import { useState, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import useSWR from "swr"
-import { apiClient } from "@/lib/api-client"
-import type { WorkoutSession } from "@/lib/types"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft } from "lucide-react"
-import { format, startOfWeek, endOfWeek, parseISO } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { SessionCard } from "@/components/sessions/session-card"
-import { AlertModal } from "@/components/ui/alert-modal"
+import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
+import useSWR from "swr";
+import { apiClient } from "@/lib/api-client";
+import type { WorkoutSession } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { format, startOfWeek, endOfWeek, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { SessionCard } from "@/components/sessions/session-card";
+import { AlertModal } from "@/components/ui/alert-modal";
+import { ShareSessionModal } from "@/components/sessions/share-session-modal";
 
 export default function SessionsPage() {
-  const router = useRouter()
-  const { data: sessions, mutate } = useSWR<WorkoutSession[]>("/sessions/all", () => apiClient.get("/sessions/all"))
+  const router = useRouter();
+  const { data: sessions, mutate } = useSWR<WorkoutSession[]>(
+    "/sessions/all",
+    () => apiClient.get("/sessions/all")
+  );
 
-  const [alertModal, setAlertModal] = useState<{ open: boolean; title: string; description: string; onConfirm?: () => void, variant?: "default" | "destructive" }>({ open: false, title: "", description: "" })
+  const [alertModal, setAlertModal] = useState<{
+    open: boolean;
+    title: string;
+    description: string;
+    onConfirm?: () => void;
+    variant?: "default" | "destructive";
+  }>({ open: false, title: "", description: "" });
+
+  const [sharingSessionId, setSharingSessionId] = useState<string | null>(null);
 
   const groupedSessions = useMemo(() => {
-    if (!sessions) return {}
+    if (!sessions) return {};
     return sessions.reduce((acc, session) => {
-      const date = parseISO(session.start_time)
-      const weekStart = startOfWeek(date, { weekStartsOn: 1 })
-      const key = format(weekStart, "yyyy-MM-dd")
-      
-      if (!acc[key]) {
-        acc[key] = []
-      }
-      acc[key].push(session)
-      return acc
-    }, {} as Record<string, WorkoutSession[]>)
-  }, [sessions])
+      const date = parseISO(session.start_time);
+      const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+      const key = format(weekStart, "yyyy-MM-dd");
 
-  const sortedGroupKeys = Object.keys(groupedSessions).sort((a, b) => b.localeCompare(a))
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push(session);
+      return acc;
+    }, {} as Record<string, WorkoutSession[]>);
+  }, [sessions]);
+
+  const sortedGroupKeys = Object.keys(groupedSessions).sort((a, b) =>
+    b.localeCompare(a)
+  );
 
   const handleViewDetails = (sessionId: string) => {
-    router.push(`/dashboard/sessions/${sessionId}`)
-  }
+    router.push(`/dashboard/sessions/${sessionId}`);
+  };
 
   const handleContinueWorkout = (sessionId: string) => {
-    router.push(`/dashboard/workout/${sessionId}`)
-  }
+    router.push(`/dashboard/workout/${sessionId}`);
+  };
 
   const handleDeleteSession = (sessionId: string) => {
-    const session = sessions?.find(s => s.id === sessionId);
+    const session = sessions?.find((s) => s.id === sessionId);
     setAlertModal({
       open: true,
       title: "Confirmar Exclusão",
@@ -52,20 +66,23 @@ export default function SessionsPage() {
       variant: "destructive",
       onConfirm: async () => {
         try {
-          await apiClient.delete(`/sessions/${sessionId}`)
-          mutate()
-          setAlertModal({ open: false, title: "", description: "" })
+          await apiClient.delete(`/sessions/${sessionId}`);
+          mutate();
+          setAlertModal({ open: false, title: "", description: "" });
         } catch (error) {
           setAlertModal({
             open: true,
             title: "Erro",
             description: "Não foi possível deletar a sessão.",
-          })
+          });
         }
       },
-    })
-  }
+    });
+  };
 
+  const handleShare = (sessionId: string) => {
+    setSharingSessionId(sessionId);
+  };
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
@@ -80,19 +97,28 @@ export default function SessionsPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Histórico de Treinos</h1>
-            <p className="text-muted-foreground">Veja e gerencie todas as suas sessões</p>
+            <h1 className="text-3xl font-bold text-foreground">
+              Histórico de Treinos
+            </h1>
+            <p className="text-muted-foreground">
+              Veja e gerencie todas as suas sessões
+            </p>
           </div>
         </div>
 
         <div className="space-y-8">
           {sessions === undefined ? (
-            <p className="text-muted-foreground text-center py-12">Carregando seu histórico...</p>
+            <p className="text-muted-foreground text-center py-12">
+              Carregando seu histórico...
+            </p>
           ) : sortedGroupKeys.length > 0 ? (
-            sortedGroupKeys.map(groupKey => {
-              const weekStartDate = parseISO(groupKey)
-              const weekEndDate = endOfWeek(weekStartDate, { weekStartsOn: 1 })
-              const weekLabel = `Semana de ${format(weekStartDate, "dd/MM")} a ${format(weekEndDate, "dd/MM/yyyy")}`
+            sortedGroupKeys.map((groupKey) => {
+              const weekStartDate = parseISO(groupKey);
+              const weekEndDate = endOfWeek(weekStartDate, { weekStartsOn: 1 });
+              const weekLabel = `Semana de ${format(
+                weekStartDate,
+                "dd/MM"
+              )} a ${format(weekEndDate, "dd/MM/yyyy")}`;
 
               const sessionsInGroup = groupedSessions[groupKey];
               return (
@@ -101,24 +127,32 @@ export default function SessionsPage() {
                     {weekLabel}
                   </h2>
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {sessionsInGroup.map(session => (
-                      <SessionCard 
+                    {sessionsInGroup.map((session) => (
+                      <SessionCard
                         key={session.id}
                         session={session}
                         onView={handleViewDetails}
                         onContinue={handleContinueWorkout}
                         onDelete={handleDeleteSession}
+                        onShare={handleShare}
                       />
                     ))}
                   </div>
                 </div>
-              )
+              );
             })
           ) : (
             <div className="text-center py-20">
-              <h3 className="text-lg font-semibold text-foreground">Nenhum treino encontrado</h3>
-              <p className="text-muted-foreground mt-2">Parece que você ainda não registrou nenhum treino.</p>
-              <Button onClick={() => router.push('/dashboard')} className="mt-6 bg-primary hover:bg-primary-hover">
+              <h3 className="text-lg font-semibold text-foreground">
+                Nenhum treino encontrado
+              </h3>
+              <p className="text-muted-foreground mt-2">
+                Parece que você ainda não registrou nenhum treino.
+              </p>
+              <Button
+                onClick={() => router.push("/dashboard")}
+                className="mt-6 bg-primary hover:bg-primary-hover"
+              >
                 Começar a Treinar
               </Button>
             </div>
@@ -136,6 +170,16 @@ export default function SessionsPage() {
         cancelText={alertModal.onConfirm ? "Cancelar" : undefined}
         confirmText={alertModal.onConfirm ? "Confirmar" : "OK"}
       />
+
+      <ShareSessionModal
+        sessionId={sharingSessionId}
+        open={!!sharingSessionId}
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setSharingSessionId(null);
+          }
+        }}
+      />
     </div>
-  )
+  );
 }
