@@ -2,7 +2,7 @@
 
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { Check } from "lucide-react"
+import { Check, X } from "lucide-react"
 
 interface CardioSetInputProps {
   durationMinutes: number

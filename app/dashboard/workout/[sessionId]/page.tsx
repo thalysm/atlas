@@ -77,6 +77,13 @@ export default function WorkoutSessionPage() {
     setExercises(newExercises)
     saveSession(newExercises)
   }
+  
+  const handleRemoveSet = (exerciseIndex: number, setIndex: number) => {
+    const newExercises = [...exercises]
+    newExercises[exerciseIndex].sets.splice(setIndex, 1)
+    setExercises(newExercises)
+    saveSession(newExercises)
+  }
 
   const handleToggleComplete = (exerciseIndex: number, setIndex: number) => {
     const newExercises = [...exercises]
@@ -246,30 +253,37 @@ export default function WorkoutSessionPage() {
                   {exercise.sets.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">Nenhuma série adicionada</p>
                   ) : (
-                    exercise.sets.map((set: any, setIndex: number) =>
-                      exercise.type === "strength" ? (
-                        <StrengthSetInput
-                          key={setIndex}
-                          setNumber={setIndex + 1}
-                          weight={set.weight}
-                          reps={set.reps}
-                          completed={set.completed}
-                          onChange={(data) => handleUpdateSet(exerciseIndex, setIndex, data)}
-                          onToggleComplete={() => handleToggleComplete(exerciseIndex, setIndex)}
-                        />
-                      ) : (
-                        <CardioSetInput
-                          key={setIndex}
-                          durationMinutes={set.duration_minutes}
-                          distance={set.distance}
-                          incline={set.incline}
-                          speed={set.speed}
-                          completed={set.completed}
-                          onChange={(data) => handleUpdateSet(exerciseIndex, setIndex, data)}
-                          onToggleComplete={() => handleToggleComplete(exerciseIndex, setIndex)}
-                        />
-                      ),
-                    )
+                    exercise.sets.map((set: any, setIndex: number) => (
+                      <div key={setIndex} className="flex items-center gap-2">
+                        <div className="flex-1">
+                          {exercise.type === "strength" ? (
+                            <StrengthSetInput
+                              setNumber={setIndex + 1}
+                              weight={set.weight}
+                              reps={set.reps}
+                              completed={set.completed}
+                              onChange={(data) => handleUpdateSet(exerciseIndex, setIndex, data)}
+                              onToggleComplete={() => handleToggleComplete(exerciseIndex, setIndex)}
+                            />
+                          ) : (
+                            <CardioSetInput
+                              durationMinutes={set.duration_minutes}
+                              distance={set.distance}
+                              incline={set.incline}
+                              speed={set.speed}
+                              completed={set.completed}
+                              onChange={(data) => handleUpdateSet(exerciseIndex, setIndex, data)}
+                              onToggleComplete={() => handleToggleComplete(exerciseIndex, setIndex)}
+                            />
+                          )}
+                        </div>
+                        {!session.is_completed && (
+                            <Button size="icon-sm" variant="destructive" onClick={() => handleRemoveSet(exerciseIndex, setIndex)}>
+                                <X className="h-4 w-4" />
+                            </Button>
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
