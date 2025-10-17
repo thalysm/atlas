@@ -63,5 +63,6 @@ export function useAuth() {
     register,
     login,
     logout,
+    mutate, 
   }
 }

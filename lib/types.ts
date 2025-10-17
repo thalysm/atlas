@@ -3,6 +3,10 @@ export interface User {
   email: string
   username: string
   name: string
+  height?: number
+  weight?: number
+  gender?: string
+  birth_date?: string
   created_at: string
 }
 

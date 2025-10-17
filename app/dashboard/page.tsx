@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { apiClient } from "@/lib/api-client"
@@ -10,11 +10,15 @@ import { Card } from "@/components/ui/card"
 import { Dumbbell, Calendar, TrendingUp, Users, History, Plus } from "lucide-react"
 import Link from "next/link"
 import { UserProfileDropdown } from "@/components/dashboard/user-profile-dropdown"
+import { useAuth } from "@/hooks/use-auth"
+import { HealthDataModal } from "@/components/profile/health-data-modal"
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const { data: packages } = useSWR<WorkoutPackage[]>("/packages", () => apiClient.get("/packages"))
   const { data: sessions, isLoading: isLoadingSessions } = useSWR<WorkoutSession[]>("/sessions/all", () => apiClient.get("/sessions/all"))
+  const [isHealthModalOpen, setIsHealthModalOpen] = useState(false)
 
   const activeSessions = sessions?.filter(s => !s.is_completed)
 
@@ -23,6 +27,12 @@ export default function DashboardPage() {
       router.push(`/dashboard/workout/${activeSessions[0].id}`)
     }
   }, [activeSessions, router])
+
+  useEffect(() => {
+    if (user && (!user.height || !user.weight || !user.gender || !user.birth_date)) {
+      setIsHealthModalOpen(true)
+    }
+  }, [user])
 
   const handleStartWorkout = async (packageId: string) => {
     try {
@@ -41,24 +51,25 @@ export default function DashboardPage() {
       alert("Erro ao iniciar treino livre")
     }
   }
-  
+
   if (isLoadingSessions || (activeSessions && activeSessions.length > 0)) {
     return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-            <p className="text-muted-foreground">Carregando seu dashboard...</p>
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Carregando seu dashboard...</p>
+      </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
+      <HealthDataModal open={isHealthModalOpen} onOpenChange={setIsHealthModalOpen} />
       <div className="max-w-7xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
-            <div>
-                <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
-                <p className="text-muted-foreground mt-2">Bem-vindo de volta ao Atlas!</p>
-            </div>
-            <UserProfileDropdown />
+          <div>
+            <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
+            <p className="text-muted-foreground mt-2">Bem-vindo de volta, {user?.name}!</p>
+          </div>
+          <UserProfileDropdown />
         </header>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -135,12 +146,12 @@ export default function DashboardPage() {
 
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-4">Iniciar Treino</h2>
-           <div className="mb-4">
-             <Button onClick={handleStartEmptyWorkout} variant="outline" className="w-full border-border">
-                <Plus className="h-4 w-4 mr-2"/>
-                Iniciar Treino Livre
-             </Button>
-           </div>
+          <div className="mb-4">
+            <Button onClick={handleStartEmptyWorkout} variant="outline" className="w-full border-border">
+              <Plus className="h-4 w-4 mr-2" />
+              Iniciar Treino Livre
+            </Button>
+          </div>
           {packages && packages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {packages.map((pkg) => (

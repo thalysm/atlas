@@ -8,14 +8,23 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowLeft } from "lucide-react"
 import { AlertModal } from "@/components/ui/alert-modal"
 
 export default function ProfilePage() {
   const router = useRouter()
   const { user, mutate } = useAuth()
-  
-  const [detailsForm, setDetailsForm] = useState({ name: '', email: '', username: '' })
+
+  const [detailsForm, setDetailsForm] = useState({
+    name: user?.name || '',
+    email: user?.email || '',
+    username: user?.username || '',
+    height: user?.height || 0,
+    weight: user?.weight || 0,
+    gender: user?.gender || '',
+    birth_date: user?.birth_date || ''
+  })
   const [passwordForm, setPasswordForm] = useState({ current_password: '', new_password: '', confirm_password: '' })
 
   const [isSavingDetails, setIsSavingDetails] = useState(false)
@@ -30,9 +39,13 @@ export default function ProfilePage() {
   useEffect(() => {
     if (user) {
       setDetailsForm({
-        name: user.name,
-        email: user.email,
-        username: user.username,
+        name: user.name || '',
+        email: user.email || '',
+        username: user.username || '',
+        height: user.height || 0,
+        weight: user.weight || 0,
+        gender: user.gender || '',
+        birth_date: user.birth_date ? user.birth_date.split('T')[0] : ''
       })
     }
   }, [user])
@@ -41,7 +54,12 @@ export default function ProfilePage() {
     e.preventDefault()
     setIsSavingDetails(true)
     try {
-      await apiClient.put("/auth/me", detailsForm)
+      await apiClient.put("/auth/me", {
+        ...detailsForm,
+        height: Number(detailsForm.height) || null,
+        weight: Number(detailsForm.weight) || null,
+        birth_date: detailsForm.birth_date || null
+      });
       mutate() // Re-fetch user data
       setAlertModal({ open: true, title: "Sucesso", description: "Seus dados foram atualizados." })
     } catch (error: any) {
@@ -102,31 +120,72 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <Card>
-          <form onSubmit={handleDetailsSubmit}>
+        <form onSubmit={handleDetailsSubmit}>
+          <Card>
             <CardHeader>
               <CardTitle>Dados Pessoais</CardTitle>
               <CardDescription>Atualize seu nome, e-mail e nome de usuário.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo</Label>
-                <Input id="name" value={detailsForm.name} onChange={e => setDetailsForm({...detailsForm, name: e.target.value})} className="bg-surface border-border"/>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="username">Nome de Usuário</Label>
-                <Input id="username" value={detailsForm.username} onChange={e => setDetailsForm({...detailsForm, username: e.target.value})} className="bg-surface border-border"/>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome Completo</Label>
+                  <Input id="name" value={detailsForm.name} onChange={e => setDetailsForm({...detailsForm, name: e.target.value})} className="bg-surface border-border"/>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="username">Nome de Usuário</Label>
+                  <Input id="username" value={detailsForm.username} onChange={e => setDetailsForm({...detailsForm, username: e.target.value})} className="bg-surface border-border"/>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
                 <Input id="email" type="email" value={detailsForm.email} onChange={e => setDetailsForm({...detailsForm, email: e.target.value})} className="bg-surface border-border"/>
               </div>
             </CardContent>
+          </Card>
+
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle>Dados de Saúde</CardTitle>
+              <CardDescription>Essas informações nos ajudam a calcular métricas mais precisas sobre seus treinos.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="height">Altura (cm)</Label>
+                  <Input id="height" type="number" placeholder="Ex: 175" value={detailsForm.height || ''} onChange={e => setDetailsForm({ ...detailsForm, height: Number(e.target.value) })} className="bg-surface border-border" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="weight">Peso (kg)</Label>
+                  <Input id="weight" type="number" placeholder="Ex: 70.5" value={detailsForm.weight || ''} onChange={e => setDetailsForm({ ...detailsForm, weight: Number(e.target.value) })} step="0.1" className="bg-surface border-border" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="birth_date">Data de Nascimento</Label>
+                  <Input id="birth_date" type="date" value={detailsForm.birth_date} onChange={e => setDetailsForm({ ...detailsForm, birth_date: e.target.value })} className="bg-surface border-border" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="gender">Sexo</Label>
+                  <Select value={detailsForm.gender} onValueChange={value => setDetailsForm({ ...detailsForm, gender: value })}>
+                    <SelectTrigger className="w-full bg-surface border-border">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Masculino</SelectItem>
+                      <SelectItem value="female">Feminino</SelectItem>
+                      <SelectItem value="other">Outro</SelectItem>
+                      <SelectItem value="prefer_not_to_say">Prefiro não dizer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
             <CardFooter>
               <Button type="submit" disabled={isSavingDetails}>{isSavingDetails ? "Salvando..." : "Salvar Alterações"}</Button>
             </CardFooter>
-          </form>
-        </Card>
+          </Card>
+        </form>
 
         <Card>
           <form onSubmit={handlePasswordSubmit}>
