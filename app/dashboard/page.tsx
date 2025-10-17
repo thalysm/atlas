@@ -7,18 +7,30 @@ import { apiClient } from "@/lib/api-client"
 import type { WorkoutPackage, WorkoutSession } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Dumbbell, Calendar, TrendingUp, Users, History, Plus } from "lucide-react"
+import { Dumbbell, Calendar, TrendingUp, Users, History, Plus, Droplet } from "lucide-react"
 import Link from "next/link"
 import { UserProfileDropdown } from "@/components/dashboard/user-profile-dropdown"
 import { useAuth } from "@/hooks/use-auth"
 import { HealthDataModal } from "@/components/profile/health-data-modal"
+import { WaterIntakeModal } from "@/components/dashboard/water-intake-modal"
+import { Progress } from "@/components/ui/progress"
 
 export default function DashboardPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const [isHealthModalOpen, setIsHealthModalOpen] = useState(false)
+  const [isWaterModalOpen, setIsWaterModalOpen] = useState(false)
+
   const { data: packages } = useSWR<WorkoutPackage[]>("/packages", () => apiClient.get("/packages"))
   const { data: sessions, isLoading: isLoadingSessions } = useSWR<WorkoutSession[]>("/sessions/all", () => apiClient.get("/sessions/all"))
-  const [isHealthModalOpen, setIsHealthModalOpen] = useState(false)
+
+  const today = new Date().toISOString().split('T')[0]
+  const { data: waterStats, mutate: mutateWaterStats } = useSWR<Record<string, number>>(`/analytics/water/stats?days=1`, () => apiClient.get(`/analytics/water/stats?days=1`))
+  const { data: waterRecommendation } = useSWR<{ recommendation_ml: number }>(`/analytics/water/recommendation`, () => apiClient.get(`/analytics/water/recommendation`))
+
+  const dailyIntake = waterStats?.[today] || 0
+  const dailyGoal = waterRecommendation?.recommendation_ml || 2000
+  const waterProgress = dailyGoal > 0 ? (dailyIntake / dailyGoal) * 100 : 0
 
   const activeSessions = sessions?.filter(s => !s.is_completed)
 
@@ -54,23 +66,44 @@ export default function DashboardPage() {
 
   if (isLoadingSessions || (activeSessions && activeSessions.length > 0)) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Carregando seu dashboard...</p>
-      </div>
+        <div className="min-h-screen bg-background flex items-center justify-center">
+            <p className="text-muted-foreground">Carregando seu dashboard...</p>
+        </div>
     )
   }
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <HealthDataModal open={isHealthModalOpen} onOpenChange={setIsHealthModalOpen} />
+      <WaterIntakeModal open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen} onWaterLogged={() => mutateWaterStats()} />
       <div className="max-w-7xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
-            <p className="text-muted-foreground mt-2">Bem-vindo de volta, {user?.name}!</p>
-          </div>
-          <UserProfileDropdown />
+            <div>
+                <h1 className="text-4xl font-bold text-foreground">Dashboard</h1>
+                <p className="text-muted-foreground mt-2">Bem-vindo de volta ao Atlas!</p>
+            </div>
+            <UserProfileDropdown />
         </header>
+
+        <Card className="p-6 border-border">
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                    <Droplet className="h-6 w-6 text-primary"/>
+                    <h2 className="text-xl font-bold">Consumo de Água</h2>
+                </div>
+                <Button size="sm" onClick={() => setIsWaterModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2"/>
+                    Adicionar
+                </Button>
+            </div>
+            <div>
+                <div className="flex justify-between items-baseline mb-2">
+                    <span className="text-2xl font-bold text-primary">{(dailyIntake / 1000).toFixed(2)}L</span>
+                    <span className="text-sm text-muted-foreground">Meta: {(dailyGoal / 1000).toFixed(1)}L</span>
+                </div>
+                <Progress value={waterProgress} />
+            </div>
+        </Card>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
@@ -146,12 +179,12 @@ export default function DashboardPage() {
 
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-4">Iniciar Treino</h2>
-          <div className="mb-4">
-            <Button onClick={handleStartEmptyWorkout} variant="outline" className="w-full border-border">
-              <Plus className="h-4 w-4 mr-2" />
-              Iniciar Treino Livre
-            </Button>
-          </div>
+           <div className="mb-4">
+             <Button onClick={handleStartEmptyWorkout} variant="outline" className="w-full border-border">
+                <Plus className="h-4 w-4 mr-2"/>
+                Iniciar Treino Livre
+             </Button>
+           </div>
           {packages && packages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {packages.map((pkg) => (

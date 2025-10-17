@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
-import { Calendar, Clock, TrendingUp, Dumbbell, ArrowLeft, Weight, Repeat, BarChart3 } from "lucide-react"
+import { Calendar, Clock, TrendingUp, Dumbbell, ArrowLeft, Weight, Repeat, BarChart3, Droplet } from "lucide-react"
 import type { Exercise } from "@/lib/types"
 
 interface WorkoutStats {
@@ -28,6 +28,10 @@ interface ProgressionData {
   volume: number
 }
 
+interface WaterStats {
+  [date: string]: number;
+}
+
 export default function AnalyticsPage() {
   const router = useRouter()
   const [timeRange, setTimeRange] = useState("30")
@@ -42,6 +46,10 @@ export default function AnalyticsPage() {
   const { data: progressionData } = useSWR<ProgressionData[]>(
     selectedExerciseId ? `/analytics/progression/${selectedExerciseId}?days=${timeRange}` : null,
     (url) => apiClient.get(url)
+  )
+
+  const { data: waterStats } = useSWR<WaterStats>(`/analytics/water/stats?days=${timeRange}`, () =>
+    apiClient.get(`/analytics/water/stats?days=${timeRange}`)
   )
 
   const strengthExercises = useMemo(() => exercises?.filter(ex => ex.type === 'strength') || [], [exercises])
@@ -68,6 +76,13 @@ export default function AnalyticsPage() {
 
     return Object.values(aggregated).sort((a, b) => new Date(a.date.split('/').reverse().join('-')).getTime() - new Date(b.date.split('/').reverse().join('-')).getTime())
   }, [progressionData])
+
+  const waterByDayData = waterStats
+    ? Object.entries(waterStats).map(([date, amount]) => ({
+        date,
+        liters: parseFloat((amount / 1000).toFixed(2)),
+      }))
+    : []
 
 
   return (
@@ -170,6 +185,28 @@ export default function AnalyticsPage() {
         }
 
         <Card className="p-6 border-border">
+          <h2 className="text-xl font-bold text-foreground mb-6">Consumo de Água (Litros)</h2>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={waterByDayData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#404040" />
+                <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} fontSize={12} />
+                <YAxis stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#2a2a2a",
+                    border: "1px solid #404040",
+                    borderRadius: "8px",
+                    color: "#ffffff",
+                  }}
+                />
+                <Bar dataKey="liters" name="Litros" fill="#3498db" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Card>
+
+        <Card className="p-6 border-border">
           <h2 className="text-xl font-bold text-foreground mb-6">Treinos por Dia</h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
@@ -228,7 +265,7 @@ export default function AnalyticsPage() {
             ) : (
               <div className="flex items-center justify-center h-full">
                 <p className="text-muted-foreground">
-                  {selectedExerciseId ? "Nenhum dado de progressão para este exercício no período selecionado." : "Selecione um exercício para ver sua progressão."}
+                  {selectedExerciseId ? "Nenhum dado de progressão para este exercício no período selecionado." : "Selecione um exercício de força para ver sua progressão."}
                 </p>
               </div>
             )}
