@@ -14,12 +14,15 @@ import { useAuth } from "@/hooks/use-auth"
 import { HealthDataModal } from "@/components/profile/health-data-modal"
 import { WaterIntakeModal } from "@/components/dashboard/water-intake-modal"
 import { Progress } from "@/components/ui/progress"
+import { WeightLogModal } from "@/components/dashboard/weight-log-modal"
+import { Weight } from "lucide-react"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user } = useAuth()
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false)
   const [isWaterModalOpen, setIsWaterModalOpen] = useState(false)
+  const [isWeightModalOpen, setIsWeightModalOpen] = useState(false)
+  const { user, mutate: mutateUser } = useAuth()
 
   const { data: packages } = useSWR<WorkoutPackage[]>("/packages", () => apiClient.get("/packages"))
   const { data: sessions, isLoading: isLoadingSessions } = useSWR<WorkoutSession[]>("/sessions/all", () => apiClient.get("/sessions/all"))
@@ -76,6 +79,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background p-4 md:p-8">
       <HealthDataModal open={isHealthModalOpen} onOpenChange={setIsHealthModalOpen} />
       <WaterIntakeModal open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen} onWaterLogged={() => mutateWaterStats()} />
+      <WeightLogModal open={isWeightModalOpen} onOpenChange={setIsWeightModalOpen} onWeightLogged={() => mutateUser()} />
       <div className="max-w-7xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
             <div>
@@ -85,25 +89,8 @@ export default function DashboardPage() {
             <UserProfileDropdown />
         </header>
 
-        <Card className="p-6 border-border">
-            <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                    <Droplet className="h-6 w-6 text-primary"/>
-                    <h2 className="text-xl font-bold">Consumo de Água</h2>
-                </div>
-                <Button size="sm" onClick={() => setIsWaterModalOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2"/>
-                    Adicionar
-                </Button>
-            </div>
-            <div>
-                <div className="flex justify-between items-baseline mb-2">
-                    <span className="text-2xl font-bold text-primary">{(dailyIntake / 1000).toFixed(2)}L</span>
-                    <span className="text-sm text-muted-foreground">Meta: {(dailyGoal / 1000).toFixed(1)}L</span>
-                </div>
-                <Progress value={waterProgress} />
-            </div>
-        </Card>
+        
+
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
@@ -177,6 +164,43 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        <Card className="p-6 border-border">
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                    <Droplet className="h-6 w-6 text-primary"/>
+                    <h2 className="text-xl font-bold">Consumo de Água</h2>
+                </div>
+                <Button size="sm" onClick={() => setIsWaterModalOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2"/>
+                    Adicionar
+                </Button>
+            </div>
+            <div>
+                <div className="flex justify-between items-baseline mb-2">
+                    <span className="text-2xl font-bold text-primary">{(dailyIntake / 1000).toFixed(2)}L</span>
+                    <span className="text-sm text-muted-foreground">Meta: {(dailyGoal / 1000).toFixed(1)}L</span>
+                </div>
+                <Progress value={waterProgress} />
+            </div>
+        </Card>
+
+        <Card className="p-6 border-border">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Weight className="h-6 w-6 text-primary"/>
+                        <h2 className="text-xl font-bold">Peso Corporal</h2>
+                    </div>
+                    <Button size="sm" onClick={() => setIsWeightModalOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2"/>
+                        Atualizar
+                    </Button>
+                </div>
+                <div>
+                    <p className="text-3xl font-bold text-primary">{user?.weight || "--"} kg</p>
+                    <p className="text-sm text-muted-foreground mt-1">Seu peso mais recente</p>
+                </div>
+            </Card>
+
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-4">Iniciar Treino</h2>
            <div className="mb-4">
@@ -201,6 +225,7 @@ export default function DashboardPage() {
                     >
                       Iniciar Treino
                     </Button>
+                    
                   </div>
                 </Card>
               ))}
@@ -213,6 +238,8 @@ export default function DashboardPage() {
               </Button>
             </Card>
           )}
+
+          
         </div>
       </div>
     </div>

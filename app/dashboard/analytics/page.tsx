@@ -32,6 +32,11 @@ interface WaterStats {
   [date: string]: number;
 }
 
+interface WeightProgressionData {
+  date: string;
+  weight: number;
+}
+
 export default function AnalyticsPage() {
   const router = useRouter()
   const [timeRange, setTimeRange] = useState("30")
@@ -52,20 +57,24 @@ export default function AnalyticsPage() {
     apiClient.get(`/analytics/water/stats?days=${timeRange}`)
   )
 
+  const { data: weightProgression } = useSWR<WeightProgressionData[]>(
+    `/analytics/weight/progression?days=${timeRange}`,
+    (url) => apiClient.get(url)
+  );
+
   const strengthExercises = useMemo(() => exercises?.filter(ex => ex.type === 'strength') || [], [exercises])
 
   const workoutsByDayData = stats?.workouts_by_day
     ? Object.entries(stats.workouts_by_day).map(([date, count]) => ({
-        date,
+        date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
         workouts: count,
       }))
     : []
 
   const formattedProgressionData = useMemo(() => {
     if (!progressionData) return []
-    // Aggregate data by date, taking the max volume and max weight for that day
     const aggregated = progressionData.reduce((acc, curr) => {
-      const date = new Date(curr.date).toLocaleDateString('pt-BR')
+      const date = new Date(curr.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
       if (!acc[date]) {
         acc[date] = { date, maxWeight: 0, totalVolume: 0 }
       }
@@ -79,10 +88,18 @@ export default function AnalyticsPage() {
 
   const waterByDayData = waterStats
     ? Object.entries(waterStats).map(([date, amount]) => ({
-        date,
+        date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
         liters: parseFloat((amount / 1000).toFixed(2)),
       }))
     : []
+  
+  const formattedWeightData = useMemo(() => {
+    if (!weightProgression) return []
+    return weightProgression.map(entry => ({
+      date: new Date(entry.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+      peso: entry.weight
+    })).sort((a, b) => new Date(a.date.split('/').reverse().join('-')).getTime() - new Date(b.date.split('/').reverse().join('-')).getTime());
+  }, [weightProgression]);
 
 
   return (
@@ -116,7 +133,6 @@ export default function AnalyticsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Total de Treinos */}
           <Card className="p-6 border-border">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-primary/10 rounded-lg">
@@ -129,7 +145,6 @@ export default function AnalyticsPage() {
             </div>
           </Card>
 
-          {/* Volume Total */}
           <Card className="p-6 border-border">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-primary/10 rounded-lg">
@@ -142,7 +157,6 @@ export default function AnalyticsPage() {
             </div>
           </Card>
 
-          {/* Duração Média */}
           <Card className="p-6 border-border">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-primary/10 rounded-lg">
@@ -155,7 +169,6 @@ export default function AnalyticsPage() {
             </div>
           </Card>
 
-          {/* Frequência Semanal */}
           <Card className="p-6 border-border">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-primary/10 rounded-lg">
@@ -169,7 +182,6 @@ export default function AnalyticsPage() {
           </Card>
         </div>
         
-        {/* Exercício mais treinado */}
         {stats?.most_frequent_exercise &&
             <Card className="p-6 border-border">
                 <div className="flex items-center gap-4">
@@ -183,6 +195,35 @@ export default function AnalyticsPage() {
                 </div>
             </Card>
         }
+
+        <Card className="p-6 border-border">
+          <h2 className="text-xl font-bold text-foreground mb-6">Evolução de Peso (kg)</h2>
+          <div className="h-80">
+            {formattedWeightData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={formattedWeightData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#404040" />
+                  <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} fontSize={12} />
+                  <YAxis stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} domain={['dataMin - 2', 'dataMax + 2']} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#2a2a2a",
+                      border: "1px solid #404040",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  <Line type="monotone" dataKey="peso" name="Peso (kg)" stroke="#8884d8" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-muted-foreground">
+                  Sem dados de peso para o período selecionado. Comece a registrar seu peso no dashboard!
+                </p>
+              </div>
+            )}
+          </div>
+        </Card>
 
         <Card className="p-6 border-border">
           <h2 className="text-xl font-bold text-foreground mb-6">Consumo de Água (Litros)</h2>
