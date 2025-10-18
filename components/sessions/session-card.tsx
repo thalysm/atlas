@@ -4,7 +4,7 @@ import type { WorkoutSession } from "@/lib/types"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Clock, Dumbbell, Calendar, PlayCircle, Eye, Trash2, Share2 } from "lucide-react"
+import { Clock, Dumbbell, Calendar, PlayCircle, Eye, Trash2, Share2, Flame } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -41,8 +41,15 @@ export function SessionCard({ session, onView, onContinue, onDelete, onShare }: 
           </div>
           <div className="flex items-center gap-1.5">
             <Dumbbell className="h-4 w-4" />
-            <span>{session.exercise_count} exercícios</span>
+            {/* CORREÇÃO AQUI: Usar '??' para garantir que 0 seja exibido corretamente */}
+            <span>{session.exercise_count ?? 0} exercícios</span>
           </div>
+          {session.total_calories !== undefined && session.total_calories !== null && (
+            <div className="flex items-center gap-1.5">
+              <Flame className="h-4 w-4 text-orange-500" />
+              <span>~{Math.round(session.total_calories)} kcal</span>
+            </div>
+          )}
         </div>
       </div>
       <div className="mt-4 flex gap-2">

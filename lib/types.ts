@@ -70,7 +70,9 @@ export interface WorkoutSession {
   end_time?: string
   duration_minutes?: number
   is_completed: boolean
-  created_at: string
+  created_at: string 
+  exercise_count?: number 
+  total_calories?: number 
 }
 
 export interface GroupMember {
