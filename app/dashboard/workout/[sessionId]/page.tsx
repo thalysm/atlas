@@ -44,9 +44,7 @@ export default function WorkoutSessionPage() {
 
  const startTimeObject = useMemo(() => {
     if (session) {
-      console.log("LOG 1 (RAW session.start_time):", session.start_time); // LOG 1
       const parsedDate = ensureUtcAndParse(session.start_time);
-      console.log("LOG 2 (Parsed Date Object):", parsedDate); // LOG 2
       return parsedDate;
     }
     return null;
