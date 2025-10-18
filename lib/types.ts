@@ -89,3 +89,14 @@ export interface CompetitionGroup {
   invite_code: string
   created_at: string
 }
+
+export interface Reminder {
+  id: string
+  user_id: string
+  title: string
+  time: string
+  frequency: 'daily' | 'weekly' | 'monthly'
+  frequency_details?: number[] | number | null // Array for weekly, number for monthly
+  completed?: boolean // Only relevant for /today endpoint
+  created_at: string
+}
