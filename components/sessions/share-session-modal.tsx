@@ -21,16 +21,17 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob | null> {
   }
 }
 
-// --- Início da Função para Embutir Fontes ---
+// Função para Embutir Fontes (mantida como antes)
 async function getFontEmbedCSS() {
-  try {
+  // ... (código mantido igual ao fornecido anteriormente)
+    try {
     // Busca a folha de estilo da fonte Geist (ajuste o caminho se for diferente)
-    const fontCssUrl = "/_next/static/css/app/layout.css"; 
+    const fontCssUrl = "/_next/static/css/app/layout.css";
     const cssResponse = await fetch(fontCssUrl);
     if (!cssResponse.ok) return '';
 
     let cssText = await cssResponse.text();
-    
+
     // Encontra todas as URLs de fontes na folha de estilo
     const fontUrls = cssText.match(/url\(([^)]+)\)/g) || [];
 
@@ -39,9 +40,9 @@ async function getFontEmbedCSS() {
       fontUrls.map(async (urlString) => {
         const urlMatch = urlString.match(/url\(([^)]+)\)/);
         if (!urlMatch) return;
-        
+
         const originalUrl = urlMatch[1].replace(/['"]/g, '');
-        
+
         try {
           const fontResponse = await fetch(originalUrl);
           if (!fontResponse.ok) return;
@@ -53,7 +54,7 @@ async function getFontEmbedCSS() {
             reader.onerror = reject;
             reader.readAsDataURL(blob);
           });
-          
+
           // Substitui a URL original pela versão em Data URL
           cssText = cssText.replace(originalUrl, dataUrl);
         } catch (error) {
@@ -61,14 +62,13 @@ async function getFontEmbedCSS() {
         }
       })
     );
-    
+
     return cssText;
   } catch (error) {
     console.error("Error generating font CSS:", error);
     return '';
   }
 }
-// --- Fim da Função para Embutir Fontes ---
 
 
 interface ShareSessionModalProps {
@@ -83,58 +83,91 @@ export function ShareSessionModal({ sessionId, open, onOpenChange }: ShareSessio
     (url) => apiClient.get(url)
   );
 
-  const squareRef = useRef<HTMLDivElement>(null);
-  const storyRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null); // Único ref necessário
   const [fontEmbedCss, setFontEmbedCss] = useState<string>('');
+  const [selectedSize, setSelectedSize] = useState<"square" | "story" | "story-transparent">("square"); // Estado para tamanho
+  const [transparentBg, setTransparentBg] = useState(false); // Estado para fundo transparente
 
-  // Carrega o CSS da fonte quando o modal é aberto
   useEffect(() => {
     if (open) {
       getFontEmbedCSS().then(setFontEmbedCss);
     }
   }, [open]);
 
-  const handleShareOrDownload = async (size: "square" | "story") => {
-    const ref = size === "square" ? squareRef : storyRef;
-    if (ref.current === null) {
-      alert("Erro: Não foi possível encontrar o elemento para gerar a imagem.");
+  // Atualiza os estados quando a aba muda
+  const handleTabChange = (value: string) => {
+    const sizeValue = value as "square" | "story" | "story-transparent";
+    setSelectedSize(sizeValue);
+    setTransparentBg(value === "story-transparent");
+  }
+
+  const handleShareOrDownload = async () => {
+    if (cardRef.current === null || !session) {
+      alert("Erro: Não foi possível encontrar o elemento ou os dados da sessão.");
       return;
     }
-    
+
+    const isTransparent = selectedSize === "story-transparent";
+    const height = (selectedSize === "square") ? 1080 : 1920;
+
     const options = {
       cacheBust: true,
-      pixelRatio: 1,
+      pixelRatio: 1, // Manter 1 para melhor performance inicial, pode aumentar se necessário
       width: 1080,
-      height: size === "square" ? 1080 : 1920,
-      fontEmbedCSS: fontEmbedCss, // Injeta o CSS da fonte aqui
+      height: height,
+      fontEmbedCSS: fontEmbedCss,
+      // Aplicar fundo transparente se necessário
+      ...(isTransparent && { backgroundColor: 'transparent' }),
+      // Tentar forçar o fundo do body para transparente se a opção acima falhar
+      // style: isTransparent ? { body: { backgroundColor: 'transparent !important' } } : {},
     };
 
     try {
-      const dataUrl = await toPng(ref.current, options);
+      // Forçar re-render com a prop de transparência antes de gerar a imagem
+      setTransparentBg(isTransparent);
+      // Pequeno delay para garantir que o re-render ocorreu (ajuste se necessário)
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const dataUrl = await toPng(cardRef.current, options);
       const blob = await dataUrlToBlob(dataUrl);
       if (!blob) throw new Error("Não foi possível converter a imagem para Blob.");
 
-      const file = new File([blob], `atlas-workout-${size}.png`, { type: blob.type });
+      const fileName = `atlas-workout-${selectedSize.replace('-transparent','')}-${session.id}.png`;
+      const file = new File([blob], fileName, { type: blob.type });
 
-      if (navigator.share && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `Meu treino no Atlas: ${session?.package_name}`,
-          text: `Confira meu treino de hoje! Feito no Atlas.`,
-        });
+      // Verificar se pode compartilhar ARQUIVOS
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+            files: [file],
+            title: `Meu treino no Atlas: ${session.package_name}`,
+            text: `Confira meu treino de hoje! Feito no Atlas.`,
+            });
+        } catch (shareError: any) {
+            // Se o usuário cancelar o share, não fazer nada. Se for outro erro, logar.
+            if (shareError.name !== 'AbortError') {
+                console.error("Erro ao tentar compartilhar:", shareError);
+                // Fallback para download se o share falhar por outro motivo
+                 const link = document.createElement("a");
+                 link.download = fileName;
+                 link.href = dataUrl;
+                 link.click();
+            }
+        }
       } else {
+        // Fallback para download
         const link = document.createElement("a");
-        link.download = `atlas-workout-${size}-${session?.id}.png`;
+        link.download = fileName;
         link.href = dataUrl;
         link.click();
       }
     } catch (err) {
-      console.error("Erro ao compartilhar ou baixar a imagem:", err);
-      alert("Erro ao compartilhar ou baixar a imagem. Tente novamente.");
+      console.error("Erro ao gerar/compartilhar/baixar a imagem:", err);
+      alert("Erro ao gerar/compartilhar/baixar a imagem. Tente novamente.");
     }
   };
 
-  const isShareApiAvailable = typeof navigator !== 'undefined' && !!navigator.share;
+  const isShareApiAvailable = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -145,57 +178,37 @@ export function ShareSessionModal({ sessionId, open, onOpenChange }: ShareSessio
           </DialogTitle>
         </DialogHeader>
 
+        {/* Elemento único para gerar a imagem, posicionado fora da tela */}
         <div className="absolute -left-[9999px] -top-[9999px] opacity-0 pointer-events-none">
             {session && (
-                <>
-                    <ShareSessionCard
-                        ref={squareRef}
-                        session={session}
-                        size="square"
-                    />
-                    <ShareSessionCard
-                        ref={storyRef}
-                        session={session}
-                        size="story"
-                    />
-                </>
+                 <ShareSessionCard
+                    ref={cardRef}
+                    session={session}
+                    size={selectedSize === "square" ? "square" : "story"}
+                    transparentBg={transparentBg} // Passa a prop de transparência
+                 />
             )}
         </div>
 
         {session ? (
-          <Tabs defaultValue="square" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 bg-surface">
+          <Tabs defaultValue="square" className="w-full" onValueChange={handleTabChange}>
+            <TabsList className="grid w-full grid-cols-3 bg-surface"> {/* Alterado para 3 colunas */}
               <TabsTrigger value="square">Feed (1:1)</TabsTrigger>
               <TabsTrigger value="story">Story (9:16)</TabsTrigger>
+              <TabsTrigger value="story-transparent">Story (Transp.)</TabsTrigger> {/* Nova aba */}
             </TabsList>
-            
+
+            {/* Conteúdo unificado para preview */}
             <TabsContent value="square">
-              <div className="flex flex-col items-center gap-4 mt-4">
-                <div className="w-[300px] h-[300px] bg-background rounded-md overflow-hidden flex justify-center items-center">
-                  <div style={{ transform: 'scale(0.277)', transformOrigin: 'center center' }}>
-                    <ShareSessionCard session={session} size="square" />
-                  </div>
-                </div>
-                <Button onClick={() => handleShareOrDownload("square")}>
-                  {isShareApiAvailable ? <Share2 className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
-                  {isShareApiAvailable ? 'Compartilhar' : 'Baixar Imagem'}
-                </Button>
-              </div>
+              <SharePreview size="square" onAction={handleShareOrDownload} isShareAvailable={isShareApiAvailable} session={session} transparentBg={false} />
+            </TabsContent>
+            <TabsContent value="story">
+              <SharePreview size="story" onAction={handleShareOrDownload} isShareAvailable={isShareApiAvailable} session={session} transparentBg={false} />
+            </TabsContent>
+             <TabsContent value="story-transparent">
+              <SharePreview size="story" onAction={handleShareOrDownload} isShareAvailable={isShareApiAvailable} session={session} transparentBg={true} />
             </TabsContent>
 
-            <TabsContent value="story">
-              <div className="flex flex-col items-center gap-4 mt-4">
-                <div className="w-[270px] h-[480px] bg-background rounded-md overflow-hidden flex justify-center items-center">
-                  <div style={{ transform: 'scale(0.25)', transformOrigin: 'center center' }}>
-                    <ShareSessionCard session={session} size="story" />
-                  </div>
-                </div>
-                <Button onClick={() => handleShareOrDownload("story")}>
-                   {isShareApiAvailable ? <Share2 className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
-                   {isShareApiAvailable ? 'Compartilhar' : 'Baixar Imagem'}
-                </Button>
-              </div>
-            </TabsContent>
           </Tabs>
         ) : (
           <div className="flex items-center justify-center h-48">
@@ -205,4 +218,34 @@ export function ShareSessionModal({ sessionId, open, onOpenChange }: ShareSessio
       </DialogContent>
     </Dialog>
   );
+}
+
+// Componente auxiliar para o preview e botão
+interface SharePreviewProps {
+    size: "square" | "story";
+    onAction: () => void;
+    isShareAvailable: boolean;
+    session: WorkoutSession;
+    transparentBg: boolean;
+}
+
+function SharePreview({ size, onAction, isShareAvailable, session, transparentBg }: SharePreviewProps) {
+    const previewWidth = size === "square" ? "w-[300px]" : "w-[270px]";
+    const previewHeight = size === "square" ? "h-[300px]" : "h-[480px]";
+    const scale = size === "square" ? 0.277 : 0.25;
+
+    return (
+        <div className="flex flex-col items-center gap-4 mt-4">
+            <div className={`${previewWidth} ${previewHeight} bg-muted/50 rounded-md overflow-hidden flex justify-center items-center border border-dashed border-border`}>
+            {/* O conteúdo do preview é apenas visual, a imagem real é gerada a partir do cardRef */}
+             <div style={{ transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+                 <ShareSessionCard session={session} size={size} transparentBg={transparentBg} />
+            </div>
+            </div>
+            <Button onClick={onAction}>
+            {isShareAvailable ? <Share2 className="mr-2 h-4 w-4" /> : <Download className="mr-2 h-4 w-4" />}
+            {isShareAvailable ? 'Compartilhar' : 'Baixar Imagem'}
+            </Button>
+      </div>
+    );
 }
