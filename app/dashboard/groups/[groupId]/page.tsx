@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertModal } from "@/components/ui/alert-modal"
 import { Trophy, Copy, LogOut, Trash2, Crown, ArrowLeft, Clock, Dumbbell } from "lucide-react"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns" // parseISO pode ser necessário aqui ainda
 import { ptBR } from "date-fns/locale"
 import { GroupCalendar } from "@/components/groups/group-calendar"
 import { WorkoutSessionModal } from "@/components/calendar/workout-session-modal"
+import { ensureUtcAndParse } from "@/lib/utils" // <<< Importar nossa função helper
+import { defaultdict } from "@/lib/collections"; // <<< Importaremos um helper similar ao defaultdict do Python
 
 // Helper to generate distinct colors
 const generateColor = (index: number) => {
@@ -39,10 +41,37 @@ export default function GroupDetailsPage() {
   const groupDetailsUrl = groupId ? `/groups/${groupId}${timeRange !== 'all' ? `?days=${timeRange}` : ''}` : null
   const { data: group, mutate } = useSWR(groupDetailsUrl, (url) => apiClient.get(url))
 
-  const { data: calendarData } = useSWR(
+  // Fetch calendar data (grouped by UTC date from backend)
+  const { data: calendarDataUtc } = useSWR<{ [utcDate: string]: any[] }>(
     groupId ? `/groups/${groupId}/calendar?year=${currentMonth.getFullYear()}&month=${currentMonth.getMonth() + 1}` : null,
     (url) => apiClient.get(url)
   )
+
+  // Re-group workouts by local date
+  const workoutsByLocalDate = useMemo(() => {
+    const grouped: { [localDate: string]: any[] } = defaultdict(() => []); // Usa defaultdict
+    if (!calendarDataUtc) return grouped;
+
+    Object.values(calendarDataUtc).flat().forEach(session => {
+      const startDate = ensureUtcAndParse(session.start_time);
+      if (startDate) {
+        const localDateKey = format(startDate, 'yyyy-MM-dd'); // Formata a data LOCAL
+        grouped[localDateKey].push(session);
+      }
+    });
+
+    // Ordena as sessões dentro de cada dia (opcional, mas bom)
+    Object.keys(grouped).forEach(dateKey => {
+        grouped[dateKey].sort((a, b) => {
+            const dateA = ensureUtcAndParse(a.start_time)?.getTime() || 0;
+            const dateB = ensureUtcAndParse(b.start_time)?.getTime() || 0;
+            return dateA - dateB;
+        });
+    });
+
+    return grouped;
+  }, [calendarDataUtc]);
+
 
   const [copied, setCopied] = useState(false)
   const [alertModal, setAlertModal] = useState<{
@@ -56,10 +85,9 @@ export default function GroupDetailsPage() {
     title: "",
     description: "",
   })
-  
+
   const memberColors = useMemo(() => {
     if (!group?.members) return {}
-    // Ensure consistent color mapping regardless of ranking changes
     const sortedMembers = [...group.members].sort((a,b) => a.username.localeCompare(b.username));
     return sortedMembers.reduce((acc, member, index) => {
       acc[member.user_id] = generateColor(index)
@@ -67,8 +95,9 @@ export default function GroupDetailsPage() {
     }, {} as Record<string, string>)
   }, [group?.members])
 
-  const selectedWorkouts = selectedDate && calendarData
-    ? calendarData[format(selectedDate, "yyyy-MM-dd")] || []
+  // Workouts para o dia local selecionado
+  const selectedWorkouts = selectedDate
+    ? workoutsByLocalDate[format(selectedDate, "yyyy-MM-dd")] || []
     : []
 
 
@@ -123,6 +152,7 @@ export default function GroupDetailsPage() {
   }
 
   const handleDateClick = (dateStr: string) => {
+    // A string yyyy-MM-dd representa o dia local clicado no calendário
     const [year, month, day] = dateStr.split('-').map(Number);
     setSelectedDate(new Date(year, month - 1, day));
   };
@@ -194,31 +224,39 @@ export default function GroupDetailsPage() {
 
 
                 <div className="space-y-3">
-                    {group.members.map((member: any, index: number) => (
-                    <div
-                        key={member.user_id}
-                        className={`flex items-center gap-4 p-4 rounded-lg border ${
-                        index === 0 ? "border-primary bg-primary/5" : "border-border bg-surface"
-                        }`}
-                    >
-                        <div
-                        className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-white`}
-                        style={{ backgroundColor: memberColors[member.user_id] }}
-                        >
-                        {index + 1}
-                        </div>
+                    {group.members.map((member: any, index: number) => {
+                       const joinedDate = ensureUtcAndParse(member.joined_at);
+                       const formattedJoinedDate = joinedDate
+                         ? format(joinedDate, 'dd/MM/yy', { locale: ptBR })
+                         : 'Data inválida';
 
-                        <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                            <p className="font-semibold text-foreground">{member.username}</p>
-                            {member.user_id === group.owner_id && <Crown className="h-4 w-4 text-warning" />}
-                        </div>
-                        <p className="text-sm text-muted-foreground">{member.workout_count} treinos completados</p>
-                        </div>
+                       return (
+                          <div
+                              key={member.user_id}
+                              className={`flex items-center gap-4 p-4 rounded-lg border ${
+                              index === 0 ? "border-primary bg-primary/5" : "border-border bg-surface"
+                              }`}
+                          >
+                              <div
+                              className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-white`}
+                              style={{ backgroundColor: memberColors[member.user_id] }}
+                              >
+                              {index + 1}
+                              </div>
 
-                        {index === 0 && <Trophy className="h-6 w-6 text-primary" />}
-                    </div>
-                    ))}
+                              <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                  <p className="font-semibold text-foreground">{member.username}</p>
+                                  {member.user_id === group.owner_id && <Crown className="h-4 w-4 text-warning" />}
+                              </div>
+                              <p className="text-sm text-muted-foreground">{member.workout_count} treinos completados</p>
+                              <p className="text-xs text-muted-foreground mt-1">Entrou em: {formattedJoinedDate}</p>
+                              </div>
+
+                              {index === 0 && <Trophy className="h-6 w-6 text-primary" />}
+                          </div>
+                       );
+                    })}
                 </div>
             </Card>
           </div>
@@ -255,7 +293,8 @@ export default function GroupDetailsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
                  <GroupCalendar
-                    workoutsByDate={calendarData || {}}
+                    // Passar os dados reagrupados por data local
+                    workoutsByDate={workoutsByLocalDate || {}}
                     members={group.members}
                     memberColors={memberColors}
                     onDateClick={handleDateClick}
@@ -320,4 +359,16 @@ export default function GroupDetailsPage() {
        />
     </div>
   )
+}
+
+// Helper defaultdict - pode colocar em lib/collections.ts se preferir
+function defaultdict<T>(factory: () => T): { [key: string]: T } {
+    return new Proxy({} as { [key: string]: T }, {
+        get: (target, name: string) => {
+            if (!(name in target)) {
+                target[name] = factory();
+            }
+            return target[name];
+        }
+    });
 }

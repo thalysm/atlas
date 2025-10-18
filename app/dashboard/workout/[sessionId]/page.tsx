@@ -4,20 +4,20 @@ import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import useSWR from "swr"
 import { apiClient } from "@/lib/api-client"
-import type { WorkoutSession, Exercise } from "@/lib/types"
+import type { WorkoutSession, Exercise, ExerciseLog, StrengthSet, CardioSet } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { StrengthSetInput } from "@/components/workout/strength-set-input"
 import { CardioSetInput } from "@/components/workout/cardio-set-input"
 import { Plus, Check, Clock, Trash2, X, Search } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
+import { formatDistanceToNow } from "date-fns" // Não precisamos mais do parseISO aqui
 import { ptBR } from "date-fns/locale"
 import { AlertModal } from "@/components/ui/alert-modal"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ExerciseCard } from "@/components/exercises/exercise-card"
 import { RestTimer } from "@/components/workout/rest-timer"
-
+import { ensureUtcAndParse } from "@/lib/utils" // <<< Garantir que esta importação está correta
 
 export default function WorkoutSessionPage() {
   const router = useRouter()
@@ -30,7 +30,7 @@ export default function WorkoutSessionPage() {
 
   const { data: allExercises } = useSWR<Exercise[]>("/exercises", () => apiClient.get("/exercises"))
 
-  const [exercises, setExercises] = useState<any[]>([])
+  const [exercises, setExercises] = useState<ExerciseLog[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [isAddExerciseOpen, setIsAddExerciseOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -38,10 +38,22 @@ export default function WorkoutSessionPage() {
 
   useEffect(() => {
     if (session) {
-      setExercises(session.exercises)
+      setExercises(JSON.parse(JSON.stringify(session.exercises)))
     }
   }, [session])
 
+ const startTimeObject = useMemo(() => {
+    if (session) {
+      console.log("LOG 1 (RAW session.start_time):", session.start_time); // LOG 1
+      const parsedDate = ensureUtcAndParse(session.start_time);
+      console.log("LOG 2 (Parsed Date Object):", parsedDate); // LOG 2
+      return parsedDate;
+    }
+    return null;
+  }, [session]);
+
+  // Funções de manipulação de sets (handleAddSet, handleUpdateSet, etc.)
+  // ... (todo o código de handleAddSet, handleUpdateSet, handleRemoveSet, handleToggleComplete, saveSession, etc. permanece o mesmo) ...
   const handleAddSet = (exerciseIndex: number) => {
     const newExercises = [...exercises]
     const exercise = newExercises[exerciseIndex]
@@ -53,7 +65,7 @@ export default function WorkoutSessionPage() {
         weight: 0,
         reps: 0,
         completed: false,
-      })
+      } as StrengthSet);
     } else {
       exercise.sets.push({
         duration_minutes: 0,
@@ -61,26 +73,32 @@ export default function WorkoutSessionPage() {
         incline: undefined,
         speed: undefined,
         completed: false,
-      })
+      } as CardioSet);
     }
 
     setExercises(newExercises)
     saveSession(newExercises)
   }
 
-  const handleUpdateSet = (exerciseIndex: number, setIndex: number, data: any) => {
+  const handleUpdateSet = (exerciseIndex: number, setIndex: number, data: Partial<StrengthSet | CardioSet>) => {
     const newExercises = [...exercises]
+    const currentSet = newExercises[exerciseIndex].sets[setIndex];
     newExercises[exerciseIndex].sets[setIndex] = {
-      ...newExercises[exerciseIndex].sets[setIndex],
+      ...currentSet,
       ...data,
-    }
+    } as StrengthSet | CardioSet;
     setExercises(newExercises)
     saveSession(newExercises)
   }
-  
+
   const handleRemoveSet = (exerciseIndex: number, setIndex: number) => {
     const newExercises = [...exercises]
     newExercises[exerciseIndex].sets.splice(setIndex, 1)
+    newExercises[exerciseIndex].sets.forEach((set, index) => {
+      if ('set_number' in set) {
+        (set as StrengthSet).set_number = index + 1;
+      }
+    });
     setExercises(newExercises)
     saveSession(newExercises)
   }
@@ -92,14 +110,19 @@ export default function WorkoutSessionPage() {
     saveSession(newExercises)
   }
 
-  const saveSession = async (exercisesData: any[]) => {
+  const saveSession = async (exercisesData: ExerciseLog[]) => {
     if (session?.is_completed) return
     setIsSaving(true)
     try {
-      await apiClient.put(`/sessions/${sessionId}`, { exercises: exercisesData })
-      mutate()
+      const dataToSend = exercisesData.map(ex => ({
+          ...ex,
+          sets: ex.sets.map(s => ({ ...s }))
+      }));
+      await apiClient.put(`/sessions/${sessionId}`, { exercises: dataToSend });
+      mutate();
     } catch (error) {
       console.error("Error saving session:", error)
+      setAlertModal({ open: true, title: "Erro", description: "Falha ao salvar o progresso." });
     } finally {
       setIsSaving(false)
     }
@@ -116,12 +139,12 @@ export default function WorkoutSessionPage() {
           mutate()
           router.push("/dashboard")
         } catch (error) {
-          alert("Erro ao finalizar treino")
+           setAlertModal({ open: true, title: "Erro", description: "Não foi possível finalizar o treino." });
         }
       }
     })
   }
-  
+
   const handleCancelWorkout = () => {
     setAlertModal({
         open: true,
@@ -131,7 +154,7 @@ export default function WorkoutSessionPage() {
         onConfirm: async () => {
             try {
                 await apiClient.delete(`/sessions/${sessionId}`);
-                router.push("/dashboard"); 
+                router.push("/dashboard");
             } catch (error) {
                 setAlertModal({
                     open: true,
@@ -144,12 +167,12 @@ export default function WorkoutSessionPage() {
   };
 
   const handleAddExercise = (exercise: Exercise) => {
-    const newExerciseLog = {
+    const newExerciseLog: ExerciseLog = {
       exercise_id: exercise.id,
       exercise_name: exercise.name,
       type: exercise.type,
       sets: [],
-      notes: null,
+      notes: undefined,
     };
     const newExercises = [...exercises, newExerciseLog];
     setExercises(newExercises);
@@ -174,14 +197,16 @@ export default function WorkoutSessionPage() {
     });
   };
 
-  const filteredExercisesForModal = useMemo(() => 
+  const filteredExercisesForModal = useMemo(() =>
     allExercises
       ?.filter(ex => !exercises.some(e => e.exercise_id === ex.id))
       .filter(ex => ex.name.toLowerCase().includes(searchQuery.toLowerCase()))
   , [allExercises, exercises, searchQuery])
 
 
-  if (!session) {
+  // <<< ESTA É A VERIFICAÇÃO CRUCIAL
+  // Se o startTimeObject (parseado) for nulo, ou a sessão não carregou, mostra "Carregando"
+  if (!session || !startTimeObject) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Carregando treino...</p>
@@ -198,7 +223,9 @@ export default function WorkoutSessionPage() {
             <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
               <span>
-                Iniciado {formatDistanceToNow(new Date(session.start_time), { addSuffix: true, locale: ptBR })}
+                {/* <<< ESTA É A EXIBIÇÃO CRUCIAL
+                // Ela *deve* usar o startTimeObject que foi parseado corretamente */}
+                Iniciado {formatDistanceToNow(startTimeObject, { addSuffix: true, locale: ptBR })}
               </span>
             </div>
           </div>
@@ -223,7 +250,7 @@ export default function WorkoutSessionPage() {
 
         <div className="space-y-6">
           {exercises.map((exercise, exerciseIndex) => (
-            <Card key={exercise.exercise_id || exerciseIndex} className="p-6 border-border">
+            <Card key={exercise.exercise_id || `new-${exerciseIndex}`} className="p-6 border-border">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold text-foreground">{exercise.exercise_name}</h3>
@@ -253,24 +280,24 @@ export default function WorkoutSessionPage() {
                   {exercise.sets.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">Nenhuma série adicionada</p>
                   ) : (
-                    exercise.sets.map((set: any, setIndex: number) => (
+                    exercise.sets.map((set, setIndex) => (
                       <div key={setIndex} className="flex items-center gap-2">
                         <div className="flex-1">
                           {exercise.type === "strength" ? (
                             <StrengthSetInput
                               setNumber={setIndex + 1}
-                              weight={set.weight}
-                              reps={set.reps}
+                              weight={(set as StrengthSet).weight}
+                              reps={(set as StrengthSet).reps}
                               completed={set.completed}
                               onChange={(data) => handleUpdateSet(exerciseIndex, setIndex, data)}
                               onToggleComplete={() => handleToggleComplete(exerciseIndex, setIndex)}
                             />
                           ) : (
                             <CardioSetInput
-                              durationMinutes={set.duration_minutes}
-                              distance={set.distance}
-                              incline={set.incline}
-                              speed={set.speed}
+                              durationMinutes={(set as CardioSet).duration_minutes}
+                              distance={(set as CardioSet).distance}
+                              incline={(set as CardioSet).incline}
+                              speed={(set as CardioSet).speed}
                               completed={set.completed}
                               onChange={(data) => handleUpdateSet(exerciseIndex, setIndex, data)}
                               onToggleComplete={() => handleToggleComplete(exerciseIndex, setIndex)}
@@ -305,7 +332,7 @@ export default function WorkoutSessionPage() {
             </DialogHeader>
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
+                <Input
                     placeholder="Buscar exercício..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -314,12 +341,17 @@ export default function WorkoutSessionPage() {
             </div>
             <div className="flex-1 overflow-y-auto mt-4 pr-2 grid grid-cols-1 md:grid-cols-2 gap-2">
                 {filteredExercisesForModal?.map(exercise => (
-                    <div key={exercise.id} onClick={() => handleAddExercise(exercise)}>
-                        <ExerciseCard 
+                    <div key={exercise.id} onClick={() => handleAddExercise(exercise)} className="cursor-pointer">
+                        <ExerciseCard
                             exercise={exercise}
                         />
                     </div>
                 ))}
+                 {filteredExercisesForModal?.length === 0 && (
+                    <p className="text-center text-muted-foreground py-8 col-span-1 md:col-span-2">
+                    Nenhum exercício encontrado ou todos já estão no treino.
+                    </p>
+                 )}
             </div>
         </DialogContent>
       </Dialog>

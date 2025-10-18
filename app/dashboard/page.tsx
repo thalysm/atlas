@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { apiClient } from "@/lib/api-client"
-import type { WorkoutPackage, WorkoutSession, Reminder } from "@/lib/types" // Importar Reminder
+import type { WorkoutPackage, WorkoutSession, Reminder } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { Dumbbell, Calendar, TrendingUp, Users, History, Plus, Droplet, Weight, BellRing, Check } from "lucide-react" // Importar Check
+import { Dumbbell, Calendar, TrendingUp, Users, History, Plus, Droplet, Weight, BellRing, Check } from "lucide-react"
 import Link from "next/link"
 import { UserProfileDropdown } from "@/components/dashboard/user-profile-dropdown"
 import { useAuth } from "@/hooks/use-auth"
@@ -15,12 +15,48 @@ import { HealthDataModal } from "@/components/profile/health-data-modal"
 import { WaterIntakeModal } from "@/components/dashboard/water-intake-modal"
 import { WeightLogModal } from "@/components/dashboard/weight-log-modal"
 import { Progress } from "@/components/ui/progress"
-import { Checkbox } from "@/components/ui/checkbox" // Importar Checkbox
-import { Label } from "@/components/ui/label" // Importar Label
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
+
+/**
+ * Filtra a lista de lembretes para incluir apenas os de "hoje" (local).
+ * Converte o dia da semana JS (Sun=0) para o dia Python (Mon=0).
+ */
+const filterRemindersForToday = (reminders: Reminder[] | undefined): Reminder[] => {
+  if (!reminders) return [];
+
+  const today = new Date(); // Data local
+  const localDayOfWeek = today.getDay(); // JS: Sun=0, Mon=1, ..., Sat=6
+  // Converte para o padrão do backend (Mon=0, ..., Sun=6)
+  const pythonDayOfWeek = (localDayOfWeek === 0) ? 6 : localDayOfWeek - 1;
+  const localDayOfMonth = today.getDate(); // 1-31
+
+  const isToday = (r: Reminder) => {
+    if (r.frequency === 'daily') return true;
+    
+    if (r.frequency === 'weekly') {
+        // 'weekly' details devem ser um array
+        return Array.isArray(r.frequency_details) && r.frequency_details.includes(pythonDayOfWeek);
+    }
+    
+    if (r.frequency === 'monthly') {
+        // <<< CORREÇÃO AQUI
+        // 'monthly' details podem ser um número ou um array (baseado no erro e no JSON)
+        if (Array.isArray(r.frequency_details)) {
+            return r.frequency_details.includes(localDayOfMonth);
+        }
+        // Trata como um número único
+        return r.frequency_details === localDayOfMonth;
+    }
+    return false;
+  };
+
+  return reminders.filter(isToday).sort((a, b) => a.time.localeCompare(b.time));
+};
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { user, mutate: mutateUser } = useAuth() // Pegar mutateUser
+  const { user, mutate: mutateUser } = useAuth()
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false)
   const [isWaterModalOpen, setIsWaterModalOpen] = useState(false)
   const [isWeightModalOpen, setIsWeightModalOpen] = useState(false)
@@ -28,16 +64,22 @@ export default function DashboardPage() {
   const { data: packages } = useSWR<WorkoutPackage[]>("/packages", () => apiClient.get("/packages"))
   const { data: sessions, isLoading: isLoadingSessions } = useSWR<WorkoutSession[]>("/sessions/all", () => apiClient.get("/sessions/all"))
 
+  // Lógica de consumo de água (correta, baseada no 'today' local)
   const today = new Date().toISOString().split('T')[0]
   const { data: waterStats, mutate: mutateWaterStats } = useSWR<Record<string, number>>(`/analytics/water/stats?days=1`, () => apiClient.get(`/analytics/water/stats?days=1`))
   const { data: waterRecommendation } = useSWR<{ recommendation_ml: number }>(`/analytics/water/recommendation`, () => apiClient.get(`/analytics/water/recommendation`))
 
-  const { data: todayRemindersData, mutate: mutateReminders } = useSWR<Reminder[]>("/reminders/today", () => apiClient.get("/reminders/today"))
+  // Buscar TODOS os lembretes
+  const { data: allReminders, mutate: mutateReminders } = useSWR<Reminder[]>("/reminders", () => apiClient.get("/reminders"))
+
+  // Filtrar os lembretes localmente usando useMemo
+  const todayRemindersData = useMemo(() => filterRemindersForToday(allReminders), [allReminders]);
 
   // Estado local para gerenciar a conclusão dos lembretes
   const [todayReminders, setTodayReminders] = useState<Reminder[]>([])
 
   useEffect(() => {
+    // Usar os dados filtrados
     if (todayRemindersData) {
         setTodayReminders(todayRemindersData)
     }
@@ -49,16 +91,15 @@ export default function DashboardPage() {
 
     try {
         await apiClient.post(`/reminders/${id}/toggle`);
-        // Revalidar com o backend para garantir consistência (opcional, pode remover se confiar na UI)
-        mutateReminders();
+        mutateReminders(); // Revalida a lista de *todos* os lembretes
     } catch (error) {
         console.error("Failed to toggle reminder", error);
-        // Reverter a UI em caso de erro (rebuscando os dados)
-        mutateReminders();
+        mutateReminders(); // Reverte em caso de erro
     }
   };
 
 
+  // Lógica de consumo de água (inalterada)
   const dailyIntake = waterStats?.[today] || 0
   const dailyGoal = waterRecommendation?.recommendation_ml || 2000
   const waterProgress = dailyGoal > 0 ? (dailyIntake / dailyGoal) * 100 : 0
@@ -77,6 +118,7 @@ export default function DashboardPage() {
     }
   }, [user])
 
+  // Funções de clique (inalteradas)
   const handleStartWorkout = async (packageId: string) => {
     try {
       const response = await apiClient.post<{ id: string }>("/sessions", { package_id: packageId })
@@ -107,7 +149,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background p-4 md:p-8">
       <HealthDataModal open={isHealthModalOpen} onOpenChange={setIsHealthModalOpen} />
       <WaterIntakeModal open={isWaterModalOpen} onOpenChange={setIsWaterModalOpen} onWaterLogged={() => mutateWaterStats()} />
-      <WeightLogModal open={isWeightModalOpen} onOpenChange={setIsWeightModalOpen} onWeightLogged={() => mutateUser()} /> {/* Passar mutateUser */}
+      <WeightLogModal open={isWeightModalOpen} onOpenChange={setIsWeightModalOpen} onWeightLogged={() => mutateUser()} />
 
       <div className="max-w-7xl mx-auto space-y-8">
         <header className="flex items-center justify-between">
@@ -118,6 +160,7 @@ export default function DashboardPage() {
             <UserProfileDropdown />
         </header>
 
+        {/* Card Consumo de Água (inalterado) */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="p-6 border-border">
                 <div className="flex items-center justify-between mb-4">
@@ -139,6 +182,7 @@ export default function DashboardPage() {
                 </div>
             </Card>
 
+             {/* Card Peso Corporal (inalterado) */}
             <Card className="p-6 border-border">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
@@ -157,6 +201,7 @@ export default function DashboardPage() {
             </Card>
         </div>
 
+        {/* Card Lembretes (JSX inalterado, 'todayReminders' filtrado corretamente) */}
         <Card className="p-6 border-border">
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
@@ -167,11 +212,11 @@ export default function DashboardPage() {
                     <Link href="/dashboard/reminders">Ver todos</Link>
                 </Button>
             </div>
-            <div className="space-y-3 max-h-48 overflow-y-auto pr-2"> {/* Limitar altura e adicionar scroll */}
+            <div className="space-y-3 max-h-48 overflow-y-auto pr-2">
                 {todayReminders && todayReminders.length > 0 ? todayReminders.map(reminder => (
                     <div key={reminder.id} className="flex items-center gap-3">
                         <Checkbox
-                            id={`reminder-dash-${reminder.id}`} // ID único para o dashboard
+                            id={`reminder-dash-${reminder.id}`}
                             checked={reminder.completed}
                             onCheckedChange={() => handleToggleReminder(reminder.id)}
                         />
@@ -186,91 +231,93 @@ export default function DashboardPage() {
         </Card>
 
 
+        {/* Grid de Navegação (inalterado) */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
-            <Link href="/dashboard/packages" className="block">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <Dumbbell className="h-6 w-6 text-primary" />
+             <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
+                <Link href="/dashboard/packages" className="block">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                    <Dumbbell className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                    <p className="text-sm text-muted-foreground">Pacotes</p>
+                    <p className="text-2xl font-bold text-foreground">{packages?.length || 0}</p>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Pacotes</p>
-                  <p className="text-2xl font-bold text-foreground">{packages?.length || 0}</p>
-                </div>
-              </div>
-            </Link>
-          </Card>
+                </Link>
+            </Card>
 
-          <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
-            <Link href="/dashboard/sessions" className="block">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <History className="h-6 w-6 text-primary" />
+            <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
+                <Link href="/dashboard/sessions" className="block">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                    <History className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                    <p className="text-sm text-muted-foreground">Histórico</p>
+                    <p className="text-2xl font-bold text-foreground">Ver</p>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Histórico</p>
-                  <p className="text-2xl font-bold text-foreground">Ver</p>
-                </div>
-              </div>
-            </Link>
-          </Card>
+                </Link>
+            </Card>
 
-          <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
-            <Link href="/dashboard/calendar" className="block">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <Calendar className="h-6 w-6 text-primary" />
+            <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
+                <Link href="/dashboard/calendar" className="block">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                    <Calendar className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                    <p className="text-sm text-muted-foreground">Calendário</p>
+                    <p className="text-2xl font-bold text-foreground">Ver</p>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Calendário</p>
-                  <p className="text-2xl font-bold text-foreground">Ver</p>
-                </div>
-              </div>
-            </Link>
-          </Card>
+                </Link>
+            </Card>
 
-          <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
-            <Link href="/dashboard/analytics" className="block">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <TrendingUp className="h-6 w-6 text-primary" />
+            <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
+                <Link href="/dashboard/analytics" className="block">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                    <TrendingUp className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                    <p className="text-sm text-muted-foreground">Análises</p>
+                    <p className="text-2xl font-bold text-foreground">Ver</p>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Análises</p>
-                  <p className="text-2xl font-bold text-foreground">Ver</p>
-                </div>
-              </div>
-            </Link>
-          </Card>
+                </Link>
+            </Card>
 
-          <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
-            <Link href="/dashboard/groups" className="block">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <Users className="h-6 w-6 text-primary" />
+            <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
+                <Link href="/dashboard/groups" className="block">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                    <Users className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                    <p className="text-sm text-muted-foreground">Grupos</p>
+                    <p className="text-2xl font-bold text-foreground">Ver</p>
+                    </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Grupos</p>
-                  <p className="text-2xl font-bold text-foreground">Ver</p>
+                </Link>
+            </Card>
+            <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
+                <Link href="/dashboard/reminders" className="block">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                    <BellRing className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                    <p className="text-sm text-muted-foreground">Lembretes</p>
+                    <p className="text-2xl font-bold text-foreground">Ver</p>
+                    </div>
                 </div>
-              </div>
-            </Link>
-          </Card>
-          <Card className="p-6 border-border hover:border-primary transition-colors cursor-pointer">
-            <Link href="/dashboard/reminders" className="block">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <BellRing className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Lembretes</p>
-                  <p className="text-2xl font-bold text-foreground">Ver</p>
-                </div>
-              </div>
-            </Link>
+                </Link>
           </Card>
         </div>
 
+        {/* Seção Iniciar Treino (inalterada) */}
         <div>
           <h2 className="text-2xl font-bold text-foreground mb-4">Iniciar Treino</h2>
            <div className="mb-4">

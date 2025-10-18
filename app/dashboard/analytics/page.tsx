@@ -9,8 +9,12 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { Calendar, Clock, TrendingUp, Dumbbell, ArrowLeft, Weight, Repeat, BarChart3, Droplet } from "lucide-react"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
 import type { Exercise } from "@/lib/types"
+import { ensureUtcAndParse } from "@/lib/utils"
 
+// Interfaces (mantidas como antes)
 interface WorkoutStats {
   total_workouts: number
   total_duration_minutes: number
@@ -42,21 +46,18 @@ export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("30")
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null)
 
+  // Hooks SWR (mantidos como antes)
   const { data: stats } = useSWR<WorkoutStats>(`/analytics/stats?days=${timeRange}`, () =>
     apiClient.get(`/analytics/stats?days=${timeRange}`)
   )
-
   const { data: exercises } = useSWR<Exercise[]>("/exercises", () => apiClient.get("/exercises"))
-
   const { data: progressionData } = useSWR<ProgressionData[]>(
     selectedExerciseId ? `/analytics/progression/${selectedExerciseId}?days=${timeRange}` : null,
     (url) => apiClient.get(url)
   )
-
   const { data: waterStats } = useSWR<WaterStats>(`/analytics/water/stats?days=${timeRange}`, () =>
     apiClient.get(`/analytics/water/stats?days=${timeRange}`)
   )
-
   const { data: weightProgression } = useSWR<WeightProgressionData[]>(
     `/analytics/weight/progression?days=${timeRange}`,
     (url) => apiClient.get(url)
@@ -64,47 +65,93 @@ export default function AnalyticsPage() {
 
   const strengthExercises = useMemo(() => exercises?.filter(ex => ex.type === 'strength') || [], [exercises])
 
-  const workoutsByDayData = stats?.workouts_by_day
-    ? Object.entries(stats.workouts_by_day).map(([date, count]) => ({
-        date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-        workouts: count,
-      }))
-    : []
+  // Processamento dos dados com ensureUtcAndParse e ordenação (mantidos como antes)
+  const workoutsByDayData = useMemo(() =>
+    stats?.workouts_by_day
+      ? Object.entries(stats.workouts_by_day)
+        .map(([dateString, count]) => {
+          const dateObj = ensureUtcAndParse(dateString + 'T00:00:00');
+          return dateObj ? {
+            date: format(dateObj, 'dd/MM', { locale: ptBR }),
+            workouts: count,
+            _dateObj: dateObj
+          } : null;
+        })
+        .filter(item => item !== null)
+        .sort((a, b) => a!._dateObj.getTime() - b!._dateObj.getTime())
+        .map(({ _dateObj, ...rest }) => rest)
+      : [], [stats?.workouts_by_day]);
 
   const formattedProgressionData = useMemo(() => {
-    if (!progressionData) return []
+    if (!progressionData) return [];
     const aggregated = progressionData.reduce((acc, curr) => {
-      const date = new Date(curr.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
-      if (!acc[date]) {
-        acc[date] = { date, maxWeight: 0, totalVolume: 0 }
+       const dateObj = ensureUtcAndParse(curr.date);
+       if (!dateObj) return acc;
+       const localDateKey = format(dateObj, 'yyyy-MM-dd');
+
+      if (!acc[localDateKey]) {
+        acc[localDateKey] = {
+            date: format(dateObj, 'dd/MM', { locale: ptBR }),
+            maxWeight: 0,
+            totalVolume: 0,
+            _dateObj: dateObj
+        };
       }
-      acc[date].maxWeight = Math.max(acc[date].maxWeight, curr.weight)
-      acc[date].totalVolume += curr.volume
-      return acc
-    }, {} as Record<string, { date: string; maxWeight: number; totalVolume: number }>)
+      acc[localDateKey].maxWeight = Math.max(acc[localDateKey].maxWeight, curr.weight);
+      acc[localDateKey].totalVolume += curr.volume;
+      acc[localDateKey]._dateObj = acc[localDateKey]._dateObj < dateObj ? acc[localDateKey]._dateObj : dateObj;
+      return acc;
+    }, {} as Record<string, { date: string; maxWeight: number; totalVolume: number; _dateObj: Date }>);
 
-    return Object.values(aggregated).sort((a, b) => new Date(a.date.split('/').reverse().join('-')).getTime() - new Date(b.date.split('/').reverse().join('-')).getTime())
-  }, [progressionData])
+    return Object.values(aggregated)
+           .sort((a, b) => a._dateObj.getTime() - b._dateObj.getTime())
+           .map(({ _dateObj, ...rest }) => rest);
 
-  const waterByDayData = waterStats
-    ? Object.entries(waterStats).map(([date, amount]) => ({
-        date: new Date(date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-        liters: parseFloat((amount / 1000).toFixed(2)),
-      }))
-    : []
-  
+  }, [progressionData]);
+
+  const waterByDayData = useMemo(() =>
+    waterStats
+      ? Object.entries(waterStats)
+        .map(([dateString, amount]) => {
+           const dateObj = ensureUtcAndParse(dateString + 'T00:00:00');
+           return dateObj ? {
+            date: format(dateObj, 'dd/MM', { locale: ptBR }),
+            liters: parseFloat((amount / 1000).toFixed(2)),
+            _dateObj: dateObj
+           } : null;
+        })
+        .filter(item => item !== null)
+        .sort((a, b) => a!._dateObj.getTime() - b!._dateObj.getTime())
+        .map(({ _dateObj, ...rest }) => rest)
+      : [], [waterStats]);
+
   const formattedWeightData = useMemo(() => {
-    if (!weightProgression) return []
-    return weightProgression.map(entry => ({
-      date: new Date(entry.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-      peso: entry.weight
-    })).sort((a, b) => new Date(a.date.split('/').reverse().join('-')).getTime() - new Date(b.date.split('/').reverse().join('-')).getTime());
+    if (!weightProgression) return [];
+     const aggregated = weightProgression.reduce((acc, curr) => {
+        const dateObj = ensureUtcAndParse(curr.date);
+        if (!dateObj) return acc;
+        const localDateKey = format(dateObj, 'yyyy-MM-dd');
+
+        if (!acc[localDateKey] || dateObj > acc[localDateKey]._dateObj) {
+            acc[localDateKey] = {
+                date: format(dateObj, 'dd/MM', { locale: ptBR }),
+                peso: curr.weight,
+                _dateObj: dateObj
+            };
+        }
+        return acc;
+    }, {} as Record<string, { date: string; peso: number; _dateObj: Date }>);
+
+    return Object.values(aggregated)
+      .sort((a, b) => a._dateObj.getTime() - b._dateObj.getTime())
+      .map(({ _dateObj, ...rest }) => rest);
   }, [weightProgression]);
 
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header e Cards de Estatísticas (inalterados) */}
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -181,7 +228,7 @@ export default function AnalyticsPage() {
             </div>
           </Card>
         </div>
-        
+
         {stats?.most_frequent_exercise &&
             <Card className="p-6 border-border">
                 <div className="flex items-center gap-4">
@@ -196,6 +243,7 @@ export default function AnalyticsPage() {
             </Card>
         }
 
+        {/* Gráficos usando os dados processados */}
         <Card className="p-6 border-border">
           <h2 className="text-xl font-bold text-foreground mb-6">Evolução de Peso (kg)</h2>
           <div className="h-80">
@@ -206,13 +254,11 @@ export default function AnalyticsPage() {
                   <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} fontSize={12} />
                   <YAxis stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} domain={['dataMin - 2', 'dataMax + 2']} />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#2a2a2a",
-                      border: "1px solid #404040",
-                      borderRadius: "8px",
-                    }}
+                    contentStyle={{ backgroundColor: "#2a2a2a", border: "1px solid #404040", borderRadius: "8px" }}
+                    labelStyle={{ color: "#ffffff" }}
+                    itemStyle={{ color: "#ffffff" }}
                   />
-                  <Line type="monotone" dataKey="peso" name="Peso (kg)" stroke="#8884d8" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="peso" name="Peso (kg)" stroke="#8884d8" strokeWidth={2} dot={{ r: 4, fill: "#8884d8" }} activeDot={{ r: 8, fill: "#8884d8" }} />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -234,12 +280,9 @@ export default function AnalyticsPage() {
                 <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} fontSize={12} />
                 <YAxis stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#2a2a2a",
-                    border: "1px solid #404040",
-                    borderRadius: "8px",
-                    color: "#ffffff",
-                  }}
+                  contentStyle={{ backgroundColor: "#2a2a2a", border: "1px solid #404040", borderRadius: "8px", color: "#ffffff" }}
+                  labelStyle={{ color: "#ffffff" }}
+                  itemStyle={{ color: "#ffffff" }}
                 />
                 <Bar dataKey="liters" name="Litros" fill="#3498db" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -256,12 +299,9 @@ export default function AnalyticsPage() {
                 <XAxis dataKey="date" stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} fontSize={12} />
                 <YAxis stroke="#b0b0b0" tick={{ fill: "#b0b0b0" }} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#2a2a2a",
-                    border: "1px solid #404040",
-                    borderRadius: "8px",
-                    color: "#ffffff",
-                  }}
+                  contentStyle={{ backgroundColor: "#2a2a2a", border: "1px solid #404040", borderRadius: "8px", color: "#ffffff" }}
+                   labelStyle={{ color: "#ffffff" }}
+                   itemStyle={{ color: "#ffffff" }}
                 />
                 <Bar dataKey="workouts" name="Treinos" fill="#ff6b00" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -272,12 +312,14 @@ export default function AnalyticsPage() {
         <Card className="p-6 border-border">
           <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
             <h2 className="text-xl font-bold text-foreground">Progressão de Exercícios</h2>
-            <Select onValueChange={setSelectedExerciseId}>
+            <Select onValueChange={setSelectedExerciseId} value={selectedExerciseId || undefined}> {/* Use undefined para value quando null */}
               <SelectTrigger className="w-full sm:w-64 bg-surface border-border">
+                {/* O placeholder será exibido quando o value for undefined */}
                 <SelectValue placeholder="Selecione um exercício" />
               </SelectTrigger>
               <SelectContent>
-                {strengthExercises.map(exercise => (
+                 {/* REMOVIDO: <SelectItem value="" disabled>Selecione um exercício</SelectItem> */}
+                 {strengthExercises.map(exercise => (
                   <SelectItem key={exercise.id} value={exercise.id}>{exercise.name}</SelectItem>
                 ))}
               </SelectContent>
@@ -292,15 +334,13 @@ export default function AnalyticsPage() {
                   <YAxis yAxisId="left" stroke="#ff6b00" tick={{ fill: "#ff6b00" }} />
                   <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" tick={{ fill: "#82ca9d" }} />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#2a2a2a",
-                      border: "1px solid #404040",
-                      borderRadius: "8px",
-                    }}
+                    contentStyle={{ backgroundColor: "#2a2a2a", border: "1px solid #404040", borderRadius: "8px", color: "#ffffff" }}
+                    labelStyle={{ color: "#ffffff" }}
+                    itemStyle={{ color: "#ffffff" }}
                   />
                   <Legend />
-                  <Line yAxisId="left" type="monotone" dataKey="totalVolume" name="Volume Total (kg)" stroke="#ff6b00" strokeWidth={2} />
-                  <Line yAxisId="right" type="monotone" dataKey="maxWeight" name="Carga Máxima (kg)" stroke="#82ca9d" strokeWidth={2} />
+                  <Line yAxisId="left" type="monotone" dataKey="totalVolume" name="Volume Total (kg)" stroke="#ff6b00" strokeWidth={2} dot={{ r: 4, fill: "#ff6b00" }} activeDot={{ r: 8, fill:"#ff6b00" }}/>
+                  <Line yAxisId="right" type="monotone" dataKey="maxWeight" name="Carga Máxima (kg)" stroke="#82ca9d" strokeWidth={2} dot={{ r: 4, fill: "#82ca9d" }} activeDot={{ r: 8, fill:"#82ca9d" }}/>
                 </LineChart>
               </ResponsiveContainer>
             ) : (

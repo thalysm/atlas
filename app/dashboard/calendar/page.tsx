@@ -1,24 +1,40 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react" // <<< Importar useMemo
 import { useRouter } from "next/navigation"
 import useSWR from "swr"
 import { apiClient } from "@/lib/api-client"
 import { WorkoutCalendar } from "@/components/calendar/workout-calendar"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { format, parseISO } from "date-fns"
+import { format } from "date-fns" // Não precisa parseISO aqui
 import { ptBR } from "date-fns/locale"
 import { Clock, Dumbbell, ArrowLeft } from "lucide-react"
 import { WorkoutSessionModal } from "@/components/calendar/workout-session-modal"
+import { ensureUtcAndParse } from "@/lib/utils" // <<< Importar nossa função helper
+import { defaultdict } from "@/lib/collections"; // <<< Importar defaultdict (ou crie o arquivo se não existir)
+
+// Crie este arquivo se ele não existir: lib/collections.ts
+// export function defaultdict<T>(factory: () => T): { [key: string]: T } {
+//     return new Proxy({} as { [key: string]: T }, {
+//         get: (target, name: string) => {
+//             if (!(name in target)) {
+//                 target[name] = factory();
+//             }
+//             return target[name];
+//         }
+//     });
+// }
+
 
 export default function CalendarPage() {
   const router = useRouter()
-  const [currentDate] = useState(new Date())
+  const [currentDate] = useState(new Date()) // Mantém a data atual para buscar dados do mês
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null)
 
-  const { data: calendarData } = useSWR(
+  // Fetch calendar data (grouped by UTC date from backend)
+  const { data: calendarDataUtc } = useSWR(
     `/analytics/calendar?year=${currentDate.getFullYear()}&month=${currentDate.getMonth() + 1}`,
     () =>
       apiClient.get<{ calendar_data: Record<string, any[]> }>(
@@ -26,16 +42,41 @@ export default function CalendarPage() {
       )
   )
 
-  const workoutsByDate = calendarData?.calendar_data || {}
-  
-  const selectedWorkouts = selectedDate 
-    ? workoutsByDate[format(selectedDate, "yyyy-MM-dd")] || [] 
+  // Re-group workouts by local date
+  const workoutsByLocalDate = useMemo(() => {
+    const grouped: { [localDate: string]: any[] } = defaultdict(() => []);
+    const rawData = calendarDataUtc?.calendar_data || {};
+
+    Object.values(rawData).flat().forEach(session => {
+      const startDate = ensureUtcAndParse(session.start_time);
+      if (startDate) {
+        const localDateKey = format(startDate, 'yyyy-MM-dd'); // Formata a data LOCAL
+        grouped[localDateKey].push(session);
+      }
+    });
+
+     // Ordena as sessões dentro de cada dia (opcional)
+    Object.keys(grouped).forEach(dateKey => {
+        grouped[dateKey].sort((a, b) => {
+            const dateA = ensureUtcAndParse(a.start_time)?.getTime() || 0;
+            const dateB = ensureUtcAndParse(b.start_time)?.getTime() || 0;
+            return dateA - dateB;
+        });
+    });
+
+    return grouped;
+  }, [calendarDataUtc]);
+
+
+  // Workouts para o dia local selecionado
+  const selectedWorkouts = selectedDate
+    ? workoutsByLocalDate[format(selectedDate, "yyyy-MM-dd")] || []
     : []
 
   const handleDateClick = (dateStr: string) => {
-    // Parse the date string as UTC to avoid timezone shifts
-    const [year, month, day] = dateStr.split('-').map(Number)
-    setSelectedDate(new Date(year, month - 1, day))
+    // A string yyyy-MM-dd representa o dia local clicado no calendário
+    const [year, month, day] = dateStr.split('-').map(Number);
+    setSelectedDate(new Date(year, month - 1, day));
   }
 
   return (
@@ -58,7 +99,8 @@ export default function CalendarPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <WorkoutCalendar workoutsByDate={workoutsByDate} onDateClick={handleDateClick} />
+            {/* Passar os dados reagrupados por data local */}
+            <WorkoutCalendar workoutsByDate={workoutsByLocalDate} onDateClick={handleDateClick} />
           </div>
 
           <div className="space-y-4">

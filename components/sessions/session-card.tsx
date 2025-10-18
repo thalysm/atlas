@@ -5,8 +5,9 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Clock, Dumbbell, Calendar, PlayCircle, Eye, Trash2, Share2, Flame } from "lucide-react"
-import { format } from "date-fns"
+import { format } from "date-fns" // Não precisa mais de parseISO aqui
 import { ptBR } from "date-fns/locale"
+import { ensureUtcAndParse } from "@/lib/utils" // <<< Importar a nova função
 
 interface SessionCardProps {
   session: WorkoutSession
@@ -17,7 +18,12 @@ interface SessionCardProps {
 }
 
 export function SessionCard({ session, onView, onContinue, onDelete, onShare }: SessionCardProps) {
-  const formattedDate = format(new Date(session.start_time), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+  // Usar a nova função utilitária
+  const dateObject = ensureUtcAndParse(session.start_time);
+  // Formatar apenas se o objeto Date for válido
+  const formattedDate = dateObject
+    ? format(dateObject, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+    : "Data inválida";
 
   return (
     <Card className="p-4 border-border transition-all hover:border-primary flex flex-col justify-between">
@@ -33,7 +39,7 @@ export function SessionCard({ session, onView, onContinue, onDelete, onShare }: 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <Calendar className="h-4 w-4" />
-            <span>{formattedDate}</span>
+            <span>{formattedDate}</span> {/* Usar a data formatada */}
           </div>
           <div className="flex items-center gap-1.5">
             <Clock className="h-4 w-4" />
@@ -41,7 +47,6 @@ export function SessionCard({ session, onView, onContinue, onDelete, onShare }: 
           </div>
           <div className="flex items-center gap-1.5">
             <Dumbbell className="h-4 w-4" />
-            {/* CORREÇÃO AQUI: Usar '??' para garantir que 0 seja exibido corretamente */}
             <span>{session.exercise_count ?? 0} exercícios</span>
           </div>
           {session.total_calories !== undefined && session.total_calories !== null && (

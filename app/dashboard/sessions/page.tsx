@@ -7,11 +7,12 @@ import { apiClient } from "@/lib/api-client";
 import type { WorkoutSession } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { format, startOfWeek, endOfWeek, parseISO } from "date-fns";
+import { format, startOfWeek, endOfWeek, parseISO } from "date-fns"; // parseISO ainda é usado para a chave do grupo
 import { ptBR } from "date-fns/locale";
 import { SessionCard } from "@/components/sessions/session-card";
 import { AlertModal } from "@/components/ui/alert-modal";
 import { ShareSessionModal } from "@/components/sessions/share-session-modal";
+import { ensureUtcAndParse } from "@/lib/utils"; // <<< Importar a nova função
 
 export default function SessionsPage() {
   const router = useRouter();
@@ -33,7 +34,10 @@ export default function SessionsPage() {
   const groupedSessions = useMemo(() => {
     if (!sessions) return {};
     return sessions.reduce((acc, session) => {
-      const date = parseISO(session.start_time);
+      // Usar a nova função para obter o objeto Date
+      const date = ensureUtcAndParse(session.start_time);
+      if (!date) return acc; // Pular se a data for inválida
+
       const weekStart = startOfWeek(date, { weekStartsOn: 1 });
       const key = format(weekStart, "yyyy-MM-dd");
 
@@ -113,12 +117,14 @@ export default function SessionsPage() {
             </p>
           ) : sortedGroupKeys.length > 0 ? (
             sortedGroupKeys.map((groupKey) => {
+              // Parse a chave (que é yyyy-MM-dd) para Date antes de formatar
+              // parseISO funciona bem aqui pois a chave está em formato canônico
               const weekStartDate = parseISO(groupKey);
               const weekEndDate = endOfWeek(weekStartDate, { weekStartsOn: 1 });
               const weekLabel = `Semana de ${format(
                 weekStartDate,
-                "dd/MM"
-              )} a ${format(weekEndDate, "dd/MM/yyyy")}`;
+                "dd/MM", { locale: ptBR }
+              )} a ${format(weekEndDate, "dd/MM/yyyy", { locale: ptBR })}`;
 
               const sessionsInGroup = groupedSessions[groupKey];
               return (
